@@ -1,0 +1,25 @@
+# Aderyn configuration. CI gates on High (`Cyfrin/aderyn-ci`, fail-on: high); Low stays visible in the report.
+version = 1
+root = "."
+src = "src/"
+
+# `src/` is production code only: every test double and lab stand-in lives in `mocks/`, so this exclusion no
+# longer hides anything the deploy scripts ship. The scripts that do deploy `mocks/` packages refuse to run
+# off a test chain (`ChainIds._requireMockChain`).
+exclude = ["mocks/"]
+
+[detectors]
+# Triaged High detectors (each instance reviewed; see .github/workflows/ci.yml for the Slither twin list):
+#   abi-encode-packed-hash-collision  PoolFactory builds the EIP-1167 clone initcode from fixed-size parts; nothing is hashed
+#   arbitrary-transfer-from           Settlement.pullExact pulls from the Holder who signed the EIP-712 authorization
+#   contract-locks-ether              Escrow.openCourt forwards the exact msg.value to the court, and Escrow has no
+#                                     receive/fallback. This triage was only false while ArbitrationMock (payable, ignores msg.value) sat in src/; it now lives
+#                                     in mocks/ and cannot be deployed off a test chain.
+#   reentrancy-state-change           every kernel entrypoint is nonReentrant (transient guard); modules and pool only
+#                                     talk to the kernel or to modules named in the signed terms
+exclude = [
+    "abi-encode-packed-hash-collision",
+    "arbitrary-transfer-from",
+    "contract-locks-ether",
+    "reentrancy-state-change",
+]

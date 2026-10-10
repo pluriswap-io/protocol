@@ -1,0 +1,16 @@
+{
+  "name": "pluriswap-circuits",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "circuits:vectors": "bun circuits/js/vectors.ts",
+    "circuits:prove": "bun circuits/js/prove.ts",
+    "circuits:test": "bun test circuits/js",
+    "poseidon:fixture": "bun script/js/poseidon.ts"
+  },
+  "devDependencies": {
+    "circomlibjs": "^0.1.7",
+    "js-sha3": "^0.13.0",
+    "viem": "^2.56.8"
+  }
+}

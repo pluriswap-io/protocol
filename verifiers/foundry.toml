@@ -1,0 +1,16 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.28"
+via_ir = false
+optimizer = true
+optimizer_runs = 200
+
+# The bb-generated Honk verifiers of the private layer (PROTOCOLO.md §E.3.15.9). They live in
+# their own foundry project, outside the main tree: the main repo compiles under via_ir,
+# which solc's stack layout pass cannot reconcile with the generated ultra-wide dispatchers
+# ("could not create stack layout after 1000 iterations", every solc 0.8.28+ tried), while
+# the main tree's kernel REQUIRES via_ir. This project compiles the verifiers optimizer-only
+# to extract their initcode (test/fixtures/verifiers/), which the adapters deploy from —
+# nothing in the main build links these contracts. Regenerate with `bun circuits:prove`.

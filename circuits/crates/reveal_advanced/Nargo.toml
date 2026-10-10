@@ -1,0 +1,7 @@
+[package]
+name = "reveal_advanced"
+type = "bin"
+version = "0.1.0"
+
+[dependencies]
+pluri_commitments = { path = "../pluri_commitments" }

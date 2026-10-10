@@ -1,0 +1,4 @@
+[package]
+name = "pluri_commitments"
+type = "lib"
+version = "0.1.0"

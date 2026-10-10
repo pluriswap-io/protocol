@@ -1,0 +1,18 @@
+[workspace]
+members = [
+    "crates/pluri_commitments",
+    "crates/register_humanity",
+    "crates/register_account",
+    "crates/prepare_passport",
+    "crates/prepare_admit",
+    "crates/deposit",
+    "crates/prepare_bond",
+    "crates/prepare_side",
+    "crates/vouch",
+    "crates/claim",
+    "crates/reabsorb",
+    "crates/withdraw",
+    "crates/attest_base",
+    "crates/reveal_advanced",
+    "crates/upgrade_account",
+]

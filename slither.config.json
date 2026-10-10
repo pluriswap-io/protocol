@@ -1,0 +1,7 @@
+{
+  "filter_paths": "lib/|test/|script/|mocks/",
+  "foundry_out_directory": "out",
+  "exclude_informational": true,
+  "exclude_optimization": true,
+  "detectors_to_exclude": "arbitrary-send-erc20,arbitrary-send-eth,uninitialized-state,uninitialized-local,incorrect-equality,divide-before-multiply,unused-return,reentrancy-no-eth,calls-loop,timestamp,reentrancy-benign,reentrancy-events"
+}

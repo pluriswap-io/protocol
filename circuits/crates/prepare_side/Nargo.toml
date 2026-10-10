@@ -1,0 +1,7 @@
+[package]
+name = "prepare_side"
+type = "bin"
+authors = [""]
+
+[dependencies]
+pluri_commitments = { path = "../pluri_commitments" }
