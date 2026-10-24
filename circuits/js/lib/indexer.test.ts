@@ -8,12 +8,15 @@ import { foldPath } from "./tree.ts";
 
 const RPC = process.env.PLURI_RPC;
 const TREE = process.env.PLURI_TREE as Address | undefined;
+// Where the tree's log starts. A public RPC caps getLogs ranges, so on a real chain the scan cannot
+// start at genesis; `script/e2e.sh` passes the first block of its run.
+const FROM_BLOCK = process.env.PLURI_FROM_BLOCK ? BigInt(process.env.PLURI_FROM_BLOCK) : undefined;
 const live = Boolean(RPC && TREE);
 
 describe("readTree", () => {
   test.skipIf(!live)("rebuilds the contract's tree from its own log", async () => {
     const client = createPublicClient({ transport: http(RPC) });
-    const snap = await readTree(client, TREE!);
+    const snap = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
 
     // The check that makes everything after it trustworthy.
     expect(snap.state.root()).toBe(snap.onChainRoot);
@@ -23,7 +26,7 @@ describe("readTree", () => {
 
   test.skipIf(!live)("every leaf in it proves against the current root", async () => {
     const client = createPublicClient({ transport: http(RPC) });
-    const snap = await readTree(client, TREE!);
+    const snap = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
     expect(snap.leaves.length).toBeGreaterThan(0);
     for (let i = 0; i < snap.leaves.length; i++) {
       expect(await foldPath(snap.state.pathFor(i))).toBe(snap.onChainRoot);
@@ -32,7 +35,7 @@ describe("readTree", () => {
 
   test.skipIf(!live)("the current root is one the contract still accepts", async () => {
     const client = createPublicClient({ transport: http(RPC) });
-    const snap = await readTree(client, TREE!);
+    const snap = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
     expect(await isRootLive(client, TREE!, snap.onChainRoot)).toBe(true);
     expect(await isRootLive(client, TREE!, 123456789n)).toBe(false);
   });
@@ -44,7 +47,7 @@ describe("readTree", () => {
 
   test.skipIf(!live)("a truncated log is caught, not folded into a wrong root", async () => {
     const client = createPublicClient({ transport: http(RPC) });
-    const snap = await readTree(client, TREE!);
+    const snap = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
     if (snap.leaves.length === 0) return;
     // Past every insert, so the window holds nothing while the contract still counts leaves. An RPC
     // that caps getLogs ranges produces exactly this shape, and it must fail loudly rather than fold

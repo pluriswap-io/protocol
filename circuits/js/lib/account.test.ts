@@ -12,6 +12,9 @@ import { foldPath } from "./tree.ts";
 
 const RPC = process.env.PLURI_RPC;
 const TREE = process.env.PLURI_TREE as Address | undefined;
+// Where the tree's log starts. A public RPC caps getLogs ranges, so on a real chain the scan cannot
+// start at genesis; `script/e2e.sh` passes the first block of its run.
+const FROM_BLOCK = process.env.PLURI_FROM_BLOCK ? BigInt(process.env.PLURI_FROM_BLOCK) : undefined;
 const ESCROW = process.env.PLURI_ESCROW as Address | undefined;
 const live = Boolean(RPC && TREE);
 
@@ -35,7 +38,7 @@ describe("leafFor", () => {
 describe("locate, against a chain", () => {
   test.skipIf(!live)("the secret finds its own leaf in the contract's tree", async () => {
     const client = createPublicClient({ transport: http(RPC) });
-    const snapshot = await readTree(client, TREE!);
+    const snapshot = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
     const state = await locate(snapshot, SK_ID, await genesis(), 0n);
 
     expect(state).not.toBeNull();
@@ -47,7 +50,7 @@ describe("locate, against a chain", () => {
 
   test.skipIf(!live)("a state the account is not in returns null rather than a wrong leaf", async () => {
     const client = createPublicClient({ transport: http(RPC) });
-    const snapshot = await readTree(client, TREE!);
+    const snapshot = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
     expect(await locate(snapshot, SK_ID, await genesis(), 7n)).toBeNull();
     expect(await locate(snapshot, SK_ID + 1n, await genesis(), 0n)).toBeNull();
   });
@@ -56,7 +59,7 @@ describe("locate, against a chain", () => {
   // A wallet-held marker would publish wallet-to-account, the one link §E.3.15 exists to break.
   test.skipIf(!live)("the secret finds the block its own registration landed in", async () => {
     const client = createPublicClient({ transport: http(RPC) });
-    const snapshot = await readTree(client, TREE!);
+    const snapshot = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
     const block = await registrationBlock(snapshot, SK_ID);
     expect(block).not.toBeNull();
     expect(block!).toBeGreaterThan(0n);
@@ -68,7 +71,7 @@ describe("locate, against a chain", () => {
   test.skipIf(!(live && ESCROW))("a secret with no deals finds none, and does not throw", async () => {
     const client = createPublicClient({ transport: http(RPC) });
     // The sample account has registered but never activated a private deal.
-    const snapshot = await readTree(client, TREE!);
+    const snapshot = await readTree(client, TREE!, { fromBlock: FROM_BLOCK });
     const from = (await registrationBlock(snapshot, SK_ID)) ?? 0n;
     // Bounded by the registration rather than by genesis: the scan a real client would run.
     expect(await scanDeals(client, ESCROW!, SK_ID, { fromBlock: from })).toEqual([]);

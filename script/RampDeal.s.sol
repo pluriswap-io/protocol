@@ -66,10 +66,13 @@ contract RampDeal is Script {
         address provider = vm.addr(providerPk);
         IERC20 usdc = IERC20(StargateSepolia.USDC);
         Escrow escrow = Escrow(_escrow());
-        require(usdc.balanceOf(holder) >= PRINCIPAL, "usdc");
+        // The kernel pulls its activation share on top of the principal (Anexo R, 2026-10-02), so the
+        // Holder approves and holds both. Same formula as `Packages.share`.
+        uint256 pull = PRINCIPAL + PRINCIPAL * escrow.activationBps() / 10_000;
+        require(usdc.balanceOf(holder) >= pull, "usdc");
 
         vm.startBroadcast(holderPk);
-        usdc.approve(address(escrow), PRINCIPAL);
+        usdc.approve(address(escrow), pull);
         vm.stopBroadcast();
 
         id = _activate(escrow, holder, provider, holderPk, providerPk);
@@ -81,14 +84,14 @@ contract RampDeal is Script {
         escrow.release(id);
         vm.stopBroadcast();
         require(escrow.status(id) == Status.RELEASED, "released");
-        require(usdc.balanceOf(provider) >= PRINCIPAL, "payout");
+        require(usdc.balanceOf(provider) >= _payout(), "payout");
     }
 
     function _out(uint256 providerPk, StargateV2Ramp ramp, RampQuote memory q) internal {
         address provider = vm.addr(providerPk);
         IERC20 usdc = IERC20(StargateSepolia.USDC);
         vm.startBroadcast(providerPk);
-        usdc.approve(address(ramp), PRINCIPAL);
+        usdc.approve(address(ramp), _payout());
         ramp.send{value: q.nativeFee + 0.0002 ether}(_intent(provider));
         vm.stopBroadcast();
         require(usdc.balanceOf(address(ramp)) == 0, "ramp empty");
@@ -123,10 +126,16 @@ contract RampDeal is Script {
         vm.stopBroadcast();
     }
 
-    function _intent(address provider) internal pure returns (RampIntent memory) {
+    /// @dev What a release pays the Provider: the principal minus the kernel's completion share (Anexo R,
+    ///      2026-10-02). This is what the Provider can ramp out.
+    function _payout() internal view returns (uint256) {
+        return PRINCIPAL - PRINCIPAL * Escrow(_escrow()).completionBps() / 10_000;
+    }
+
+    function _intent(address provider) internal view returns (RampIntent memory) {
         return RampIntent({
             token: StargateSepolia.USDC,
-            amount: PRINCIPAL,
+            amount: _payout(),
             minAmountOut: 1,
             dest: StargateSepolia.ETHEREUM_SEPOLIA_EID,
             to: provider,
