@@ -1,0 +1,11 @@
+{
+  "amountOut": 996401,
+  "chainId": 421614,
+  "destEid": 40161,
+  "escrow": "0x2239bE34Fb849288C4Cc08f64802b588F28C67A4",
+  "nativeFee": 98985461402671,
+  "ramp": "0x2773C3f9F7c4A7e0F1Cb4Fa2E74bBA1bCB07620B",
+  "releasedDealId": "0x181e59ac4b4ed6566fc51f307457390d0cf456d6602b4d69de86bebf758fdb29",
+  "stargatePool": "0x543BdA7c6cA4384FE90B1F5929bb851F52888983",
+  "usdc": "0x3253a335E7bFfB4790Aa4C25C4250d206E9b9773"
+}

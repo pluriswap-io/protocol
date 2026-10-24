@@ -93,11 +93,15 @@ for step in "${STEPS[@]}"; do
 done
 [ "$failed" -eq 0 ] || { echo "e2e: a deploy or catalog script failed"; exit 1; }
 
+# The first block of this run. A public RPC caps eth_getLogs ranges (Arbitrum Sepolia: 10M blocks), so
+# every log query below starts here instead of at genesis. On anvil it is a block near 0 either way.
+FROM_BLOCK=$(python3 -c "import json;print(int(json.load(open('broadcast/Deploy.s.sol/$CHAIN/run-latest.json'))['receipts'][0]['blockNumber'],0))")
+
 # The scripts' own `require`s run locally; this checks what actually LANDED on the chain.
 ESCROW=$(python3 -c "import json;print(json.load(open('deployments/${CHAIN/421614/sepolia}-paths.json'))['escrow'])" 2>/dev/null \
   || python3 -c "import json;print(json.load(open('deployments/$CHAIN-paths.json'))['escrow'])")
 cast logs --rpc-url "$RPC" --address "$ESCROW" \
-  "Settled(bytes32,uint8,uint256,uint256)" --from-block 0 --json \
+  "Settled(bytes32,uint8,uint256,uint256)" --from-block "$FROM_BLOCK" --json \
   | python3 -c '
 import json, sys
 NAMES = ["NONE","FUNDED","FIAT_SENT","DISPUTED","RELEASED","RESOLVED_SPLIT","STALEMATE",
@@ -124,7 +128,7 @@ print(f"[OK]   {len(rows)} Core terminals on chain, principal conserved in every
 
 # The one Core terminal that conserves nothing: the deadlock's principal must have left to the burn address,
 # exactly once and whole.
-cast logs --rpc-url "$RPC" --address "$ESCROW" "PrincipalBurned(bytes32,uint256)" --from-block 0 --json \
+cast logs --rpc-url "$RPC" --address "$ESCROW" "PrincipalBurned(bytes32,uint256)" --from-block "$FROM_BLOCK" --json \
   | python3 -c '
 import json, sys
 rows = json.load(sys.stdin)
@@ -142,7 +146,7 @@ if command -v bun >/dev/null 2>&1; then
     || python3 -c "import json;print(json.load(open('deployments/$CHAIN-private.json'))['accountTree'])")
   ESCROW_PRIV=$(python3 -c "import json;print(json.load(open('deployments/${CHAIN/421614/sepolia}-private.json'))['escrow'])" 2>/dev/null \
     || python3 -c "import json;print(json.load(open('deployments/$CHAIN-private.json'))['escrow'])")
-  PLURI_RPC="$RPC" PLURI_TREE="$TREE" PLURI_ESCROW="$ESCROW_PRIV" \
+  PLURI_RPC="$RPC" PLURI_TREE="$TREE" PLURI_ESCROW="$ESCROW_PRIV" PLURI_FROM_BLOCK="$FROM_BLOCK" \
     bun test circuits/js/lib/indexer.test.ts circuits/js/lib/account.test.ts 2>&1 | tail -6
 fi
 
