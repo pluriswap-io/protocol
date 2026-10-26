@@ -69,6 +69,13 @@ contract PrivacyCommitmentsTest is Test {
         );
     }
 
+    function test_identityCommitment() public view {
+        bytes32 hsk = bytes32(_in(".builders.identity.hsk"));
+        assertEq(PrivacyCommitments.identityCommitment(hsk), _out(".builders.identity.output"));
+        // With hsk == sk_id the enrollment must not publish the account's S.
+        assertTrue(PrivacyCommitments.identityCommitment(hsk) != PrivacyCommitments.accountCommitment(hsk));
+    }
+
     function test_dealSubject() public view {
         // deal_id is a raw keccak256 output (>= p): the mod-p rule is pinned here too.
         uint256 rawDealId = _in(".builders.deal_subject.deal_id");

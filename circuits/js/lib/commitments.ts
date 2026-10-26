@@ -27,10 +27,18 @@ export const TAG_FIAT = 9n;
 export const TAG_HINT = 10n;
 export const TAG_OPERATOR = 11n;
 export const TAG_POOL_CP = 12n;
+export const TAG_IDENTITY = 13n;
 
 /** `S = Poseidon(sk_id)` — the account; never on-chain in the clear (lives inside leafRep). */
 export async function accountCommitment(skId: bigint): Promise<bigint> {
   return poseidon1(skId);
+}
+
+/** `identityCommitment = Poseidon("identity", hsk)` — what HumanityRegistry enrolls next to the anchor. Tagged so
+ *  it is not `S`: with `hsk == sk_id` an untagged `Poseidon(hsk)` IS the account commitment, which every
+ *  counterparty learns, and the public enrollment would link the account to its anchor wallet. */
+export async function identityCommitment(hsk: bigint): Promise<bigint> {
+  return poseidon2(TAG_IDENTITY, hsk);
 }
 
 /** `hn = Poseidon(anchor, registryId)` — the humanity nullifier; anchor = Passport-live address. */

@@ -1,5 +1,5 @@
 // The humanity circuit of the register bundle (PROTOCOLO.md §E.3.15.9, V1 as-built):
-// "I know the per-human secret `hsk` whose identity commitment `PoseidonT2(hsk)` sits in
+// "I know the per-human secret `hsk` whose identity commitment `Poseidon("identity", hsk)` sits in
 // the live humanity registry tree, and `hn = PoseidonT3(hsk, registryId)`."
 //
 // Registry model (§E.3.15.3 "Registro", Semaphore-style): the registry checks the Passport
@@ -12,7 +12,7 @@
 //   h_n         the humanity nullifier the passport burns;
 //   root        the registry tree root — the adapter validates it against the ring buffer;
 //   registry_id the registry domain — the adapter pins it to THE served registry instance.
-use pluri_commitments::commitments::{account_commitment, hn};
+use pluri_commitments::commitments::{hn, identity_commitment};
 use pluri_commitments::merkle::compute_root;
 use pluri_commitments::vectors as v;
 
@@ -30,7 +30,7 @@ fn main(
 ) {
     // The identity commitment must sit in the live registry tree (root is a public input —
     // a root the registry never knew fails closed at the adapter).
-    let commitment = account_commitment(hsk);
+    let commitment = identity_commitment(hsk);
     assert(compute_root::<20>(commitment, siblings, indices) == root, "identity not in registry tree");
     // The humanity nullifier derives from the secret, never from the revealed anchor.
     assert(hn(hsk, registry_id) == h_n, "hn mismatch");
@@ -43,13 +43,13 @@ fn membership_matches_vectors() {
     assert(v::REGISTRY_DEPTH == 20, "vectors registry depth != 20");
     assert(
         compute_root::<20>(
-            account_commitment(v::REGISTRY_HSK),
+            identity_commitment(v::REGISTRY_HSK),
             v::REGISTRY_SIBLINGS,
             v::REGISTRY_INDICES,
         ) == v::REGISTRY_ROOT,
         "registry membership",
     );
-    assert(account_commitment(v::REGISTRY_HSK) == v::REGISTRY_IDENTITY_COMMITMENT, "identity commitment");
+    assert(identity_commitment(v::REGISTRY_HSK) == v::REGISTRY_IDENTITY_COMMITMENT, "identity commitment");
 }
 
 #[test]
