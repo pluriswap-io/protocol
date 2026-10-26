@@ -145,7 +145,7 @@ const ESCROW_ABI = [
     type: "event",
     name: "Activated",
     inputs: [
-      { name: "dealId", type: "bytes32", indexed: false },
+      { name: "dealId", type: "bytes32", indexed: true },
       { name: "holder", type: "address", indexed: false },
       { name: "provider", type: "address", indexed: false },
       { name: "controller", type: "address", indexed: false },

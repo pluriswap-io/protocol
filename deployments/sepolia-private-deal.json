@@ -1,0 +1,24 @@
+{
+  "chainId": 421614,
+  "script": "script/js/private-deal.ts",
+  "dealId": "0x04c8daddf6874f39701ad1691462f4358def6478b307675f90d08c91f9071de5",
+  "token": "0x3AB101bEB652d245101ee96C73400c1D0bf8f1a4",
+  "principal": "250000000",
+  "bond": "50000000",
+  "holder": "0x43763824aFD163e6Ca4BCA85C62C40f60Ee5e4C1",
+  "provider": "0x23da4eDed83a31643F70657610637E415A858c82",
+  "anchors": [
+    "0xcD35068442B7a02bF5Fc22dD8aABb7d9BE335356",
+    "0xcb5fC4D7E0C4e4BF7b8aaCB971c81b13497722e8"
+  ],
+  "steps": [
+    "enroll",
+    "register",
+    "deposit",
+    "activate (bonded, prepare_side x2)",
+    "markFiat",
+    "release (Peaceful)",
+    "claim x2 (credited)",
+    "reabsorb x2"
+  ]
+}
