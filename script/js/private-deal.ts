@@ -27,6 +27,7 @@
 // holds private keys: keep it out of the repository.
 
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
@@ -138,7 +139,9 @@ function prove(circuit: string, inputs: Record<string, unknown>): Hex {
     rmSync(join(crate, `${prover}.toml`), { force: true });
   }
   const bytecode = join(CIRCUITS, "target", `${circuit}.json`);
-  const vk = join(work, `${circuit}_vk`);
+  // The key follows the compiled circuit: a recompiled circuit never proves against a stale key.
+  const digest = createHash("sha256").update(readFileSync(bytecode)).digest("hex").slice(0, 16);
+  const vk = join(work, `${circuit}_${digest}_vk`);
   if (!existsSync(join(vk, "vk"))) run(CIRCUITS, `bb write_vk -b ${bytecode} -o ${vk} -t evm`);
   const out = join(work, `${circuit}_proof`);
   run(CIRCUITS, `bb prove -b ${bytecode} -w ${join(CIRCUITS, "target", `live_${circuit}.gz`)} -k ${join(vk, "vk")} -o ${out} -t evm`);
@@ -209,7 +212,7 @@ async function register(name: string, side: Side): Promise<void> {
   console.log(`register ${name}`);
   if (!(await read<boolean>(layer.privateReputation, "registeredHn", [b32(hn)]))) {
     const tree = await readTree(client, layer.enrollmentTree, { fromBlock: BigInt(process.env.FROM_BLOCK ?? "322233838") });
-    const index = tree.state.indexOf(await c.accountCommitment(sk));
+    const index = tree.state.indexOf(await c.identityCommitment(sk));
     if (index < 0) throw new Error("the identity commitment is not in the enrollment tree");
     const path = tree.state.pathFor(index);
     if (!(await read<boolean>(layer.privatePassport, "humanitySpent", [b32(hn)]))) {
