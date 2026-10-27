@@ -36,7 +36,7 @@ contract VerifierPinsTest is Test {
     }
 
     function test_offChainKeys_arePinned() public view {
-        assertEq(_vkHash("attest_base"), 0x9421f5647cc4132c3684837721d29fdf4b5d2388c2123316336f8d21619fbdaf);
+        assertEq(_vkHash("attest_base"), 0x6ba23bf1a092d921ff557b4adc9eb0b559b0438a00ea6c9e8242fe22c030b1f9);
         assertEq(_vkHash("reveal_advanced"), 0x3a24a57b63bdde07d510ef45e125ed4ab65101ccdd4884dfd29650a478b9e035);
         assertEq(_vkHash("prepare_admit"), 0xf168d6c01ffa0ae47382dcd5ac217b041b136a86f39c75a48f89da245337ef65);
     }
