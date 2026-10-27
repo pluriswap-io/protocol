@@ -71,6 +71,10 @@ ni la acreditan**, así que su tier es T1 por construcción (la lib rechaza un l
 encima de T1). Tampoco puede trabar bond. Si después se verifica, conserva todo lo que tiene —
 registro y castigos incluidos — y desde ahí sus deals con verificadas acreditan.
 
+Una cuenta **sin deals** (su hoja todavía no tiene token) atesta cualquier token con todo en cero: T1, sin
+registro, sin castigo. Es la única hoja que puede hablar de un token que no es el suyo, y sólo porque no tiene
+nada que decir de ninguno: el circuito exige que todas sus estadísticas sean cero.
+
 ---
 
 ## 3. Tres pisos y un techo

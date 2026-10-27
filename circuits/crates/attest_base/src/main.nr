@@ -31,7 +31,7 @@
 // exact: a counterparty reading the listing knows whether a proof of humanity stands behind the account,
 // and that its record, unlike its tier, is not something a human vouched for.
 use pluri_commitments::commitments::{account_commitment, handle_commit as handle_commit_of, leaf_rep, leaf_salt};
-use pluri_commitments::merkle::is_member;
+use pluri_commitments::merkle::{compute_root, is_member};
 use pluri_commitments::tiers;
 use pluri_commitments::vectors as v;
 
@@ -77,7 +77,17 @@ fn main(
     // token — the stats are per subject AND token (§E.3.14.7), so a USDC-tier proof can
     // never ride on a PEPE leaf.
     assert(token != 0, "zero token");
-    assert(leaf_token == token, "leaf token mismatch");
+    // A leaf without a token has had no deal (LABS-253): the genesis, or an upgrade of it. Every stat of it is
+    // zero, so it attests any token honestly — T1, no record, no penalty — and a new account can publish its
+    // first listing. A leaf with a token attests only that token.
+    if leaf_token != token {
+        assert(leaf_token == 0, "leaf token mismatch");
+        assert(
+            (count_actual == 0) & (volume == 0) & (penalty_actual == 0) & (in_flight == 0) & (rec_count == 0)
+                & (rec_volume == 0),
+            "a leaf without a token has no stats",
+        );
+    }
     let s = account_commitment(sk_id);
     let leaf =
         leaf_rep(
@@ -391,4 +401,56 @@ fn an_open_account_cannot_list_as_verified() {
 #[test(should_fail_with = "claimed tier over the account's")]
 fn an_open_account_stays_at_t1() {
     open_attest(2, 1, 0);
+}
+
+/// A new account (LABS-253): its genesis leaf has no token and every stat zero. `count` is the leaf's credit,
+/// `rec` its record — non-zero only to show that a leaf without a token cannot carry stats.
+fn fresh_attest(verified: Field, tier: Field, claimed: Field, count: Field, rec: Field) {
+    let sk_id = v::OPEN_SK_ID;
+    let leaf = leaf_rep(account_commitment(sk_id), count, 0, 0, 0, 0, leaf_salt(sk_id, 0), 0, v::OPEN_CP_ROOT, 0, 0, rec, 0, verified);
+    let siblings = [0; 32];
+    let indices = [0; 32];
+    main(
+        handle_commit_of(sk_id, v::ATTEST_HANDLE_SALT),
+        tier,
+        claimed,
+        0,
+        0,
+        v::ATTEST_EXPIRY,
+        v::ATTEST_TOKEN,
+        v::ATTEST_DECIMALS,
+        compute_root::<32>(leaf, siblings, indices),
+        verified,
+        sk_id,
+        v::ATTEST_HANDLE_SALT,
+        count,
+        0,
+        0,
+        0,
+        0,
+        0,
+        v::OPEN_CP_ROOT,
+        0,
+        0,
+        rec,
+        0,
+        siblings,
+        indices,
+    );
+}
+
+#[test]
+fn a_new_account_attests_any_token_with_nothing_in_it() {
+    fresh_attest(1, 1, 0, 0, 0);
+    fresh_attest(0, 1, 0, 0, 0);
+}
+
+#[test(should_fail_with = "claimed count over the account's")]
+fn a_new_account_claims_no_record() {
+    fresh_attest(1, 1, 1, 0, 0);
+}
+
+#[test(should_fail_with = "a leaf without a token has no stats")]
+fn a_leaf_without_a_token_carries_no_stats() {
+    fresh_attest(1, 1, 1, 0, 1);
 }
