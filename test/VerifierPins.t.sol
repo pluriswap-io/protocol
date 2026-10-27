@@ -24,7 +24,7 @@ contract VerifierPinsTest is Test {
     }
 
     function test_onChainVerifiers_arePinned() public view {
-        assertEq(_initcodeHash("register_humanity"), 0xe9eb3fe15a88520bed0ea1d0232b8f692313727144fdc7cb31238bfc54f96233);
+        assertEq(_initcodeHash("register_humanity"), 0x2a04e29a9d5415bc8df588b1cdf56da3c49584331b9cfa064576f4836d58b34c);
         assertEq(_initcodeHash("register_account"), 0x119de26c645f2afb4ea77b87e1818d3af1fed7b93915ce7222687d838c44bae3);
         assertEq(_initcodeHash("upgrade_account"), 0xbbc3a65def5523de9100b872b137da11c786b1aa3882e62090695449226e74c0);
         assertEq(_initcodeHash("prepare_side"), 0x2323df427536bb21384ff0aede8be6a5f55eaaf2587de3ad8c3c4593ffed7801);

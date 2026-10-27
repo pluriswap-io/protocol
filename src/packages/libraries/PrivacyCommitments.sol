@@ -33,6 +33,7 @@ library PrivacyCommitments {
     uint256 internal constant TAG_HINT = 10;
     uint256 internal constant TAG_OPERATOR = 11;
     uint256 internal constant TAG_POOL_CP = 12;
+    uint256 internal constant TAG_IDENTITY = 13;
 
     /// @dev PoseidonT2 — one input, capacity 0. The width of `S = Poseidon(sk_id)`.
     function poseidonT2(bytes32 x) internal view returns (bytes32) {
@@ -56,6 +57,13 @@ library PrivacyCommitments {
     /// @dev `S = Poseidon(sk_id)` — the account; lives inside leafRep, never on-chain in the clear.
     function accountCommitment(bytes32 skId) internal view returns (bytes32) {
         return poseidonT2(skId);
+    }
+
+    /// @dev `identityCommitment = Poseidon("identity", hsk)` — what HumanityRegistry enrolls next to the anchor.
+    ///      Tagged so it is not `S`: with `hsk == sk_id` an untagged `Poseidon(hsk)` IS the account commitment,
+    ///      which every counterparty learns, and the public enrollment would link the account to its anchor.
+    function identityCommitment(bytes32 hsk) internal view returns (bytes32) {
+        return poseidonT3(bytes32(TAG_IDENTITY), hsk);
     }
 
     /// @dev `hn = Poseidon(anchor, registryId)` — the humanity nullifier; anchor is the Passport-live address.

@@ -22,6 +22,7 @@ pub global TAG_FIAT: Field = 9;
 pub global TAG_HINT: Field = 10;
 pub global TAG_OPERATOR: Field = 11;
 pub global TAG_POOL_CP: Field = 12;
+pub global TAG_IDENTITY: Field = 13;
 
 /// Depth of an account's own COUNTERPARTY tree (§E.3.14.7 anti-farming). 32 levels of sparse slots,
 /// addressed by `cp_path`: with a few hundred counterparties the odds of two landing on the same
@@ -50,6 +51,13 @@ pub fn chain<let N: u32>(fields: [Field; N]) -> Field {
 /// `S = Poseidon(sk_id)` — the account; lives inside leafRep, never on-chain in the clear.
 pub fn account_commitment(sk_id: Field) -> Field {
     poseidon_t2(sk_id)
+}
+
+/// `identityCommitment = Poseidon("identity", hsk)` — what HumanityRegistry enrolls next to the anchor.
+/// Tagged so it is not `S`: with `hsk == sk_id` an untagged `Poseidon(hsk)` IS the account commitment, which
+/// every counterparty learns, and the public enrollment would link the account to its anchor wallet.
+pub fn identity_commitment(hsk: Field) -> Field {
+    poseidon_t3(TAG_IDENTITY, hsk)
 }
 
 /// `hn = Poseidon(anchor, registryId)` — the humanity nullifier; anchor = Passport-live address.
@@ -315,6 +323,9 @@ fn builders_match_vectors() {
     let s = account_commitment(vectors::SK_ID);
     assert(s == vectors::EXPECTED_S, "S");
     assert(hn(vectors::ANCHOR, vectors::REGISTRY_ID) == vectors::EXPECTED_HN, "hn");
+    assert(identity_commitment(vectors::IDENTITY_HSK) == vectors::EXPECTED_IDENTITY, "identityCommitment");
+    // The enrolled commitment is never the account's `S` for the same secret.
+    assert(identity_commitment(vectors::IDENTITY_HSK) != account_commitment(vectors::IDENTITY_HSK), "identity is S");
     assert(deal_subject(vectors::SK_ID, vectors::DEAL_ID) == vectors::EXPECTED_DEAL_SUBJECT, "dealSubject");
     assert(null_rep(vectors::SK_ID, vectors::VERSION) == vectors::EXPECTED_NULL_REP, "nullRep");
     assert(null_bond(vectors::SK_ID, vectors::NOTE_SALT) == vectors::EXPECTED_NULL_BOND, "nullBond");

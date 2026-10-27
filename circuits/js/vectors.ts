@@ -186,6 +186,7 @@ async function main() {
   const builders = {
     s: { sk_id: dec(SK_ID), output: dec(s) },
     hn: { anchor: dec(ANCHOR), registry_id: dec(REGISTRY_ID), output: dec(await c.hn(ANCHOR, REGISTRY_ID)) },
+    identity: { hsk: dec(REGISTRY_HSK), output: dec(await c.identityCommitment(REGISTRY_HSK)) },
     deal_subject: {
       sk_id: dec(SK_ID),
       deal_id: dec(DEAL_ID),
@@ -304,7 +305,7 @@ async function main() {
 
   // ---------------------------------------------------------------- registry vectors (V1)
   // The humanity registry (Semaphore-style, §E.3.15.3 "Registro"): one enrollment per Passport
-  // anchor; the enrolled value is an identity commitment `PoseidonT2(hsk)` for a per-human
+  // anchor; the enrolled value is an identity commitment `Poseidon("identity", hsk)` for a per-human
   // secret hsk the registry never learns. The register circuits prove membership of that
   // commitment in this depth-20 tree, and derive `hn = PoseidonT3(hsk, registryId)` from it —
   // the registry model's reading of the pinned formula (the anchor is revealed at enroll, so
@@ -313,7 +314,7 @@ async function main() {
   // from the account secret, so `sk_id` alone recovers it (§E.3.15.3),
   // binding the burned hn to the account leaf through the shared secret.
   const regTree = await IncrementalPoseidonTree.create(REGISTRY_DEPTH);
-  const identityCommitment = await c.accountCommitment(REGISTRY_HSK);
+  const identityCommitment = await c.identityCommitment(REGISTRY_HSK);
   const regRoot = await regTree.insert(identityCommitment);
   const regProof = regTree.proofOf(0);
   const sampleHn = await c.hn(REGISTRY_HSK, REGISTRY_ID);
@@ -1485,6 +1486,8 @@ function renderNoirVectors(
   nr.push("");
   nr.push(`pub global EXPECTED_S: Field = ${b.s.output};`);
   nr.push(`pub global EXPECTED_HN: Field = ${b.hn.output};`);
+  nr.push(`pub global IDENTITY_HSK: Field = ${b.identity.hsk};`);
+  nr.push(`pub global EXPECTED_IDENTITY: Field = ${b.identity.output};`);
   nr.push(`pub global EXPECTED_DEAL_SUBJECT: Field = ${b.deal_subject.output};`);
   nr.push(`pub global EXPECTED_NULL_REP: Field = ${b.null_rep.output};`);
   nr.push(`pub global EXPECTED_NULL_BOND: Field = ${b.null_bond.output};`);

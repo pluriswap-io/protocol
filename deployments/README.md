@@ -20,7 +20,8 @@ one `e2e.sh` run: 13 scripts, the on-chain checks and the doctor (77 checks, 0 f
 stack was deleted on 2026-09-23 because it had drifted (seven doctor failures); git keeps it if anyone
 needs to look back.
 
-`sepolia-private-deal.json` is a private deal on that stack, made by `script/js/private-deal.ts` with proofs
+`sepolia-private.json` was redeployed on 2026-10-26 with the tagged identity commitment (LABS-252); the doctor
+passes (77 checks, 0 failures). `sepolia-private-deal.json` is a private deal on that stack, made by `script/js/private-deal.ts` with proofs
 generated against the live trees: two enrolled and registered accounts, a bond deposit each, one bonded
 activation of one lot, a Peaceful terminal, both claims (credited) and both reabsorbs. Its holder account is
 what a restore from the recovery phrase and the chain is tested against.
