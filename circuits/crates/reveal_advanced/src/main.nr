@@ -18,7 +18,7 @@
 // The bounds below are bounds FOR THE MASK (the leaf_rep hashes any Field, but the
 // mask multiplies — the outputs must stay canonical u128s the consumer reads).
 use pluri_commitments::commitments::{account_commitment, handle_commit as handle_commit_of, leaf_rep, leaf_salt};
-use pluri_commitments::merkle::is_member;
+use pluri_commitments::merkle::{compute_root, is_member};
 use pluri_commitments::vectors as v;
 
 fn main(
@@ -69,7 +69,15 @@ fn main(
     // same token binding — the profile is the listing's account, seen closer.
     assert(handle_commit_of(sk_id, handle_salt) == handle_commit, "handle mismatch");
     assert(token != 0, "zero token");
-    assert(leaf_token == token, "leaf token mismatch");
+    // A leaf without a token has had no deal (LABS-253): every stat of it is zero, so it proves its handle for any
+    // token — a new account opens its first deal room like any other. A leaf with a token speaks only of that token.
+    if leaf_token != token {
+        assert(leaf_token == 0, "leaf token mismatch");
+        assert(
+            (count == 0) & (volume == 0) & (penalty == 0) & (in_flight == 0) & (rec_count == 0) & (rec_volume == 0),
+            "a leaf without a token has no stats",
+        );
+    }
     let s = account_commitment(sk_id);
     let leaf = leaf_rep(
         s,
@@ -282,4 +290,50 @@ fn the_profile_count_is_the_record_not_the_credit() {
         v::REVEAL_SIBLINGS,
         v::REVEAL_INDICES,
     );
+}
+
+/// A new account (LABS-253): its genesis leaf has no token and every stat zero; it proves its handle, bound to the
+/// counterparty's key, for the token of the deal. `rec` is non-zero only to show that such a leaf carries no stats.
+fn fresh_reveal(mask: Field, out_count: Field, rec: Field) {
+    let sk_id = v::OPEN_SK_ID;
+    let leaf = leaf_rep(account_commitment(sk_id), 0, 0, 0, 0, 0, leaf_salt(sk_id, 0), 0, v::OPEN_CP_ROOT, 0, 0, rec, 0, 0);
+    let siblings = [0; 32];
+    let indices = [0; 32];
+    main(
+        handle_commit_of(sk_id, v::ATTEST_HANDLE_SALT),
+        mask,
+        out_count,
+        0,
+        0,
+        42,
+        v::ATTEST_TOKEN,
+        compute_root::<32>(leaf, siblings, indices),
+        sk_id,
+        v::ATTEST_HANDLE_SALT,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        v::OPEN_CP_ROOT,
+        0,
+        0,
+        rec,
+        0,
+        0,
+        siblings,
+        indices,
+    );
+}
+
+#[test]
+fn a_new_account_proves_its_handle() {
+    fresh_reveal(0, 0, 0);
+    fresh_reveal(3, 0, 0);
+}
+
+#[test(should_fail_with = "a leaf without a token has no stats")]
+fn a_leaf_without_a_token_reveals_no_record() {
+    fresh_reveal(1, 1, 1);
 }
