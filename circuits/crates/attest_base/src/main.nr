@@ -24,6 +24,14 @@
 // input binding, exactly like withdraw's `dest`) and the consumer checks it against its
 // own clock.
 //
+// THE CONTEXT (2026-11-10). An attestation is public: a listing shows it to everyone. Without a bind, anyone could
+// copy it into a listing of their own and show the tier of another account, and the reader would find out only at
+// the handle proof of the deal room. `context` is the one place this proof is for: a hash the consumer computes from
+// what carries the attestation (the listing and the key that publishes it, or the engagement that sends it). It rides
+// the public-input binding like `expiry` and like reveal_advanced's `requester`: the circuit does not read it, and a
+// proof made for one context does not verify with another. Zero is an attestation for any place; a consumer that
+// names a context refuses it.
+//
 // THE RECORD, THE CREDIT AND THE FLAG (2026-10-01, the open accounts). The listing shows the account's
 // deals and what it moved from the public RECORD (`rec_count`, `rec_volume`: every completed deal), and its
 // tier from the CREDIT (`count`, `volume`: once per counterparty, only between verified accounts) — the
@@ -46,6 +54,7 @@ fn main(
     decimals: pub Field,
     rep_root: pub Field,
     verified: pub Field,
+    context: pub Field,
     // The account's secret and the handle's salt (§E.3.15.3: `handleCommit` derives from
     // the same sk_id the leaf does — the pseudonym and the stats are one account).
     sk_id: Field,
@@ -175,6 +184,7 @@ fn attest_base_sample_verifies() {
         v::ATTEST_DECIMALS,
         v::ATTEST_ROOT,
         v::ATTEST_VERIFIED,
+        v::ATTEST_CONTEXT,
         v::ATTEST_SK_ID,
         v::ATTEST_HANDLE_SALT,
         v::ATTEST_COUNT,
@@ -209,6 +219,7 @@ fn understating_verifies() {
         v::ATTEST_DECIMALS,
         v::ATTEST_ROOT,
         v::ATTEST_VERIFIED,
+        v::ATTEST_CONTEXT,
         v::ATTEST_SK_ID,
         v::ATTEST_HANDLE_SALT,
         v::ATTEST_COUNT,
@@ -278,6 +289,7 @@ fn understating_the_penalty_has_no_proof() {
         v::ATTEST_DECIMALS,
         v::ATTEST_ROOT,
         v::ATTEST_VERIFIED,
+        v::ATTEST_CONTEXT,
         v::ATTEST_SK_ID,
         v::ATTEST_HANDLE_SALT,
         v::ATTEST_COUNT,
@@ -312,6 +324,7 @@ fn overstating_the_volume_has_no_proof() {
         v::ATTEST_DECIMALS,
         v::ATTEST_ROOT,
         v::ATTEST_VERIFIED,
+        v::ATTEST_CONTEXT,
         v::ATTEST_SK_ID,
         v::ATTEST_HANDLE_SALT,
         v::ATTEST_COUNT,
@@ -370,6 +383,7 @@ fn open_attest(tier: Field, count: Field, verified: Field) {
         v::ATTEST_DECIMALS,
         v::OPEN_ATTEST_ROOT,
         verified,
+        v::ATTEST_CONTEXT,
         v::OPEN_SK_ID,
         v::ATTEST_HANDLE_SALT,
         0,
@@ -421,6 +435,7 @@ fn fresh_attest(verified: Field, tier: Field, claimed: Field, count: Field, rec:
         v::ATTEST_DECIMALS,
         compute_root::<32>(leaf, siblings, indices),
         verified,
+        v::ATTEST_CONTEXT,
         sk_id,
         v::ATTEST_HANDLE_SALT,
         count,

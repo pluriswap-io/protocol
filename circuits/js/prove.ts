@@ -219,6 +219,7 @@ type AttestVectors = {
   volume_band: string;
   penalty_band: string;
   expiry: string;
+  context: string;
   root: string;
   siblings: string[];
   indices: number[];
@@ -753,7 +754,7 @@ const CIRCUIT_LIST: Circuit[] = [
   {
     name: "attest_base",
     offchain: true,
-    pubs: 10,
+    pubs: 11,
     proverToml: (v) =>
       toml([
         `handle_commit = ${str(v.attest.handle_commit)}`,
@@ -766,6 +767,7 @@ const CIRCUIT_LIST: Circuit[] = [
         `decimals = ${str(v.attest.decimals)}`,
         `rep_root = ${str(v.attest.root)}`,
         `verified = ${str(v.attest.verified)}`,
+        `context = ${str(v.attest.context)}`,
         `sk_id = ${str(v.attest.sk_id)}`,
         `handle_salt = ${str(modP(BigInt(v.attest.handle_salt)))}`,
         `count_actual = ${str(v.attest.count)}`,

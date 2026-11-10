@@ -132,6 +132,7 @@ const ATTEST_VOLUME = 750_000_000n; // 3 lots at 6 decimals
 const ATTEST_PENALTY = 5n;
 const ATTEST_VERSION = 3n;
 const ATTEST_EXPIRY = 1_800_000_000n;
+const ATTEST_CONTEXT = BigInt(keccak("pluri:attest-context")) % P;
 // The record of the same account (2026-10-01): three more completed deals than it was credited for — repeat
 // counterparties — and their volume. The listing's count and volume band read the record; the tier, the
 // credit. 900 units of a 6-dec token is 3.6 lots: the same band as the credit's 3, on purpose — the band
@@ -892,6 +893,9 @@ async function main() {
     volume_band: String(tiers.volumeBand(ATTEST_REC_VOLUME, ATTEST_DECIMALS)),
     penalty_band: String(tiers.penaltyBand(ATTEST_PENALTY)),
     expiry: dec(ATTEST_EXPIRY),
+    // The one place the attestation is for (2026-11-10): the consumer computes it from what carries the
+    // attestation. The sample's is the hash of a label.
+    context: dec(ATTEST_CONTEXT),
     score: dec(attestScore),
     siblings: attestProof.siblings.map(dec),
     indices: attestProof.indices,
@@ -1385,6 +1389,7 @@ type AttestVectors = {
   volume_band: string;
   penalty_band: string;
   expiry: string;
+  context: string;
   score: string;
   siblings: string[];
   indices: number[];
@@ -1808,6 +1813,7 @@ function renderNoirVectors(
   nr.push(`pub global ATTEST_VOLUME_BAND: Field = ${a.volume_band};`);
   nr.push(`pub global ATTEST_PENALTY_BAND: Field = ${a.penalty_band};`);
   nr.push(`pub global ATTEST_EXPIRY: Field = ${a.expiry};`);
+  nr.push(`pub global ATTEST_CONTEXT: Field = ${a.context};`);
   nr.push(`pub global ATTEST_SCORE: Field = ${a.score};`);
   nr.push(`pub global ATTEST_ROOT: Field = ${a.root};`);
   nr.push(`pub global ATTEST_SIBLINGS: [Field; ${a.siblings.length}] = [`);

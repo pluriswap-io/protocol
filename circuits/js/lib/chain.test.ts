@@ -24,6 +24,7 @@ function base(pubs: Partial<AttestBasePubs>): ChainElement {
       decimals: "6",
       rep_root: "555",
       verified: "1",
+      context: "0",
       ...pubs,
     },
   };
