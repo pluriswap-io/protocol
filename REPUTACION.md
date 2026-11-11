@@ -37,14 +37,14 @@ De ahí salen dos vistas, y toda la tensión del diseño está en el reparto ent
 | Volumen | escalón de lotes (`250+`), del **registro** | **exacto**, si lo elige |
 | Castigo | escalón de eventos (band 0–3) | **exacto, siempre** |
 | Vencimiento | sí, lo chequea el consumidor | no — la frescura es tu recibo |
-| Atado a | el handle | el handle **y la clave del requester** |
+| Atado a | el handle **y el contexto**: el lugar que la lleva | el handle **y la clave del requester** |
 
 Public inputs, en el orden exacto en que los circuitos los declaran (es el orden con el que se
 verifica; uno fuera de lugar verifica una afirmación que nadie quiso hacer):
 
 ```
 attest_base       handle_commit, tier, count, volume_band, penalty_band,
-                  expiry, token, decimals, rep_root, verified
+                  expiry, token, decimals, rep_root, verified, context
 reveal_advanced   handle_commit, fields_mask, out_count, out_volume, out_penalty,
                   requester, token, rep_root
 ```
@@ -274,9 +274,20 @@ nadie crea que chequeó algo que no chequeó. `now` es la excepción: sin reloj 
 
 ### Quién te la muestra (2026-10-02)
 
-Los cuatro chequeos dicen que la attestation es verdadera. Ninguno dice que sea de quien te la muestra:
-`attest_base` no tiene un input público que la ate a quien la presenta, y los listados son públicos, así
-que cualquiera puede copiar la de otro en un engagement y tu verificación la da por buena.
+Los cuatro chequeos dicen que la attestation es verdadera. Ninguno dice que sea de quien te la muestra, y
+los listados son públicos: sin algo que la ate a un lugar, cualquiera puede copiar la de otro en su propio
+listado o en un engagement, y tu verificación la da por buena.
+
+**El contexto (2026-11-10).** `attest_base` tiene un input público, `context`, que la ata al lugar que la
+lleva. El circuito no lo lee: viaja en el binding de los public inputs, igual que `expiry`, así que un proof
+hecho para un contexto no verifica con otro. Quien consume calcula el contexto con lo que tiene delante (en
+la plataforma: el listado y la clave que lo publica, o el engagement que la trae) y pasa ese valor en
+`opts.context`. La lib rechaza una attestation hecha para otro contexto, y también una hecha para cualquier
+lugar (`context = 0`). Sin `opts.context` la lib no compara, y lo dice en `checks`. Sólo el dueño de `sk_id`
+puede producir un proof para un contexto nuevo, así que copiar la attestation de otro en un listado propio
+deja de servir.
+
+El contexto ata la attestation a un lugar, no a una conversación. Para eso sigue haciendo falta el perfil:
 
 Antes de operar con alguien, pedile un `reveal_advanced` con `requester` = una clave tuya de esa
 conversación (en la plataforma, tu chat key: `PLATAFORMA.md` ENG-11). Sólo el dueño de `sk_id` puede

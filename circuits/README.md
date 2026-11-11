@@ -60,7 +60,7 @@ circuits/
                                   #   (`kept`, 2026-10-05) (8 pubs, no root)
   crates/withdraw/                # V3: the exit — conservation + whole-consumption mask (6 pubs)
   crates/attest_base/             # F4: the listing attestation — tier (credit) / count (record) as LOWER bounds,
-                                  #   and the flag (10 pubs, off-chain)
+                                  #   and the flag, bound to one context: the place that carries it (11 pubs, off-chain)
   crates/reveal_advanced/         # F4: the profile reveal — chosen fields as mask arithmetic (8 pubs, off-chain)
   js/
     lib/fields.ts, poseidon.ts, commitments.ts, merkle.ts, tiers.ts   # the JS twin

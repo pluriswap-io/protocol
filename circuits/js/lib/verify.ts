@@ -36,6 +36,7 @@ export const ATTEST_BASE_PUBS = [
   "decimals",
   "rep_root",
   "verified",
+  "context",
 ] as const;
 export const REVEAL_ADVANCED_PUBS = [
   "handle_commit",
@@ -62,6 +63,9 @@ export type AttestBasePubs = {
   /** The account's own flag (2026-10-01): 1 when a proof of humanity stands behind it, 0 for an open
    *  account. Exact, not a bound — the leaf commits to it. */
   verified: string;
+  /** The one place the attestation is for (2026-11-10): a hash the consumer computes from what carries it —
+   *  the listing and the key that publishes it, or the engagement. Zero is an attestation for any place. */
+  context: string;
 };
 export type RevealAdvancedPubs = {
   handle_commit: string;
@@ -91,6 +95,9 @@ export type VerifyOpts = {
   rootAlive?: (root: bigint) => boolean | Promise<boolean>;
   /** The proof check; defaults to the pinned `bb verify` spawn. */
   verifyProof?: ProofVerifier;
+  /** attest_base (2026-11-10): the context the consumer computed from what carries the attestation. When given,
+   *  an attestation made for another context, or for any place (0), is refused. */
+  context?: bigint;
 };
 
 export type VerifyResult = { ok: boolean; errors: string[]; checks: string[] };
@@ -253,6 +260,17 @@ export async function verifyAttestationBase(
     errors.push(`penalty_band out of range: ${att.pubs.penalty_band}`);
   } else {
     checks.push(`penalty band ${band} (${PENALTY_BAND_LABELS[Number(band)]})`);
+  }
+
+  // The context (2026-11-10): the proof binds it as a public input, so a copy of this attestation in another
+  // listing or engagement names a context that is not the consumer's. The lib compares; the consumer computes.
+  const context = BigInt(att.pubs.context);
+  if (opts.context === undefined) {
+    checks.push(context === 0n ? "attestation for any place (context 0)" : "bound to a context (not compared: no context given)");
+  } else if (context === opts.context) {
+    checks.push("bound to this context");
+  } else {
+    errors.push(context === 0n ? "attestation for any place, where one bound to this context is required" : "attestation made for another context");
   }
 
   if (opts.decimalsOf) {

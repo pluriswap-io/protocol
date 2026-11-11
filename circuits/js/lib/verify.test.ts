@@ -49,6 +49,7 @@ function baseEnv(over: Partial<AttestBasePubs> = {}): AttestationEnvelope<Attest
       decimals: "6",
       rep_root: "555",
       verified: "1",
+      context: "77",
       ...over,
     },
   };
@@ -164,6 +165,23 @@ describe("verifyAttestationBase (semantic checks)", () => {
     const r = await verifyAttestationBase(baseEnv({ verified: "0", tier: "2" }), { ...clock, verifyProof: stubOk });
     expect(r.ok).toBeFalse();
     expect(r.errors.join(" ")).toContain("open account above T1");
+  });
+
+  test("the context: the consumer's own, another one, and an attestation for any place (2026-11-10)", async () => {
+    const mine = await verifyAttestationBase(baseEnv(), { ...clock, verifyProof: stubOk, context: 77n });
+    expect(mine.ok).toBeTrue();
+    expect(mine.checks.join(" ")).toContain("bound to this context");
+    // A copy of the attestation in another listing: the consumer computes another context.
+    const copied = await verifyAttestationBase(baseEnv(), { ...clock, verifyProof: stubOk, context: 78n });
+    expect(copied.ok).toBeFalse();
+    expect(copied.errors.join(" ")).toContain("made for another context");
+    const anyPlace = await verifyAttestationBase(baseEnv({ context: "0" }), { ...clock, verifyProof: stubOk, context: 77n });
+    expect(anyPlace.ok).toBeFalse();
+    expect(anyPlace.errors.join(" ")).toContain("for any place");
+    // A consumer that names no context reads it, and says that it did not compare.
+    const unread = await verifyAttestationBase(baseEnv(), { ...clock, verifyProof: stubOk });
+    expect(unread.ok).toBeTrue();
+    expect(unread.checks.join(" ")).toContain("not compared");
   });
 
   test("the flag is a bit", async () => {
@@ -318,6 +336,26 @@ describe("verify against the committed fixtures (pinned bb)", () => {
     expect(env.pubs.tier).toBe("2");
     const tampered = { ...env.pubs, tier: "3" };
     expect(await bbVerifier(env.vk)(env.proof, ATTEST_BASE_PUBS.map((n) => tampered[n]))).toBeFalse();
+  });
+
+  test.skipIf(!hasBb)("attest_base: the proof binds its context — another one breaks bb verify", async () => {
+    // The copy the context exists to stop (2026-11-10): the same proof, shown where the consumer computes
+    // another context. The circuit never reads `context`; the public-input binding is what refuses it.
+    const env = fixtureEnvelope(attestProof, attestVk, ATTEST_BASE_PUBS.length, ATTEST_BASE_PUBS) as {
+      proof: string;
+      pubs: AttestBasePubs;
+      vk: string;
+    };
+    expect(BigInt(env.pubs.context)).not.toBe(0n);
+    for (const context of ["0", (BigInt(env.pubs.context) + 1n).toString()]) {
+      const moved = { ...env.pubs, context };
+      expect(await bbVerifier(env.vk)(env.proof, ATTEST_BASE_PUBS.map((n) => moved[n]))).toBeFalse();
+    }
+    const r = await verifyAttestationBase({ proof: env.proof, pubs: env.pubs, vk: env.vk }, {
+      now: 1_700_000_000n,
+      context: BigInt(env.pubs.context),
+    });
+    expect(r.ok).toBeTrue();
   });
 
   test.skipIf(!hasBb)("attest_base: an understated penalty band breaks bb verify", async () => {
