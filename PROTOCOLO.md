@@ -106,7 +106,7 @@ decisiones de este documento se explican por alguno.
 | 6 | **El dinero se mueve con culpa probada, acuerdo probado o desacuerdo elegido** | El bond no va a la contraparte sin un veredicto. Con tribunal, abandonar una pelea es perderla. Sin tribunal, un desacuerdo que nadie cede quema el principal |
 | 7 | **El happy path paga lo mismo; desviarse cuesta** | El kernel cobra igual a todo deal. Contest fee no-cero y sin devolución. Completion fee sólo si el Provider cobró algo y no es `STALEMATE` |
 | 8 | **La DAO ajusta, nunca opera** | El kernel nombra sólo a su tesorería, como destino inmutable de su fee, sin ningún verbo. La tesorería recibe y no tiene permisos; el gobierno tiene permisos y no recibe. Sobre los paquetes oficiales ajusta, con topes y demora, los términos de los deals que vienen; nunca toca un deal activado, un activo ni un resultado, y no pausa nada (§3.9). Fee de paquete nuevo = `packageId` nuevo + firmas nuevas; fee de kernel nuevo = kernel nuevo |
-| 9 | **Labs es infraestructura, no plataforma** | Sin custodia de fondos ni claves, sin matching, sin contacto con el fiat. Cobra por MSA; nunca es `feeRecipient` |
+| 9 | **Labs es infraestructura, no plataforma** | Sin custodia de fondos ni claves, sin matching, sin contacto con el fiat. Hostea los servicios sin decidir sobre el mercado: no retira un listado y no fija un parámetro (2026-11-15). Cobra por MSA; nunca es `feeRecipient` |
 | 10 | **Los pools son de sus Sponsors** | El protocolo no cobra por pools ni opera el descubrimiento. El cumplimiento es de quien abre el pool |
 | 11 | **Fees en el kernel o en el paquete, nunca en el deal** | El deal nombra ids; el kernel y los paquetes nombran montos y destinatarios. Un clon con fee cero es otro hash, u otro kernel |
 | 12 | **Un escritor, un motor** | El escrow escribe todo estado del deal y mueve todo principal. Credit-first. Un consumidor post-terminal nunca revierte el escrow |
@@ -134,7 +134,7 @@ El kernel sólo ve tres roles por deal: **Holder, Provider y Controller**. Todo 
 | **LP** | Quien deposita en un pool | Tiene shares sobre el NAV | Operar deals por tener shares |
 | **DAO (gobierno)** | El contrato con el que decide la DAO: un `TimelockController` cuyo proponente es un Governor o un Safe. Es el `governor` de los paquetes oficiales | Ajusta, con topes y 30 días de demora, los parámetros de los paquetes oficiales para los deals que vienen; decide el set oficial; ordena los pagos de la tesorería (§3.9) | Recibir fees; tocar un deal activado, un activo o un resultado; pausar; filtrar quién entra; elegir o vetar árbitros; cambiar el fee del kernel |
 | **Tesorería** | El contrato de la DAO que recibe: un Safe o un vault mínimo, que obedece al gobierno | Es el `feeRecipient` del kernel y de los paquetes oficiales; paga el MSA de Labs y los grants cuando el gobierno lo ordena | Cualquier permiso sobre un contrato del protocolo. El kernel la nombra sólo como destino, y su address no puede migrar nunca |
-| **PluriSwap Labs** | La sociedad | Mantiene la infraestructura bajo un acuerdo de servicios (MSA) con la DAO | Ser `feeRecipient`, custodiar fondos o claves, juntar contrapartes, tocar el fiat |
+| **PluriSwap Labs** | La sociedad | Construye y hostea la infraestructura bajo un acuerdo de servicios (MSA) con la DAO. Aplica los parámetros del mercado que decide la DAO. Vende premium, que no toca el mercado | Ser `feeRecipient`, custodiar fondos o claves, juntar contrapartes, tocar el fiat, retirar un listado, fijar un parámetro del mercado |
 | **Human Passport** | Dependencia externa | Da la prueba de humanidad con la que se registra una cuenta | Nada sobre deals vivos |
 
 ### 2.2 Términos
@@ -200,7 +200,8 @@ El diseño hace que esa pregunta no tenga respuesta adentro del contrato:
 - Quien gobierna (la DAO, por su timelock) no recibe nada, y lo único que ajusta son los parámetros
   acotados de los paquetes oficiales para los deals que todavía no empezaron (3.9).
 - Quien trabaja (Labs) cobra por mantener infraestructura, una cifra fija, y tiene prohibido por
-  contrato ser el mercado.
+  contrato ser el mercado. Hostea el tablero donde los pares se encuentran, pero no decide nada sobre él:
+  no retira un listado, no ordena por pago y no fija sus parámetros, que decide la DAO.
 
 ### 3.2 Las tres entidades
 
@@ -225,8 +226,16 @@ dos, la DAO sigue fijando fees que cobra. Eso lo acotan los topes y la demora (3
 
 Labs absorbe a propósito la exposición que el kernel no puede tener: hay una persona jurídica, hay
 empleados, hay gente que firma contratos y paga auditorías. El límite es lo que el MSA le prohíbe. Si Labs
-junta contrapartes, custodia fondos o claves, o toca el fiat, el límite ya se rompió y ningún párrafo lo
-repara.
+junta contrapartes, custodia fondos o claves, toca el fiat, retira un listado o decide un parámetro del
+mercado, el límite ya se rompió y ningún párrafo lo repara.
+
+**Qué es operar (2026-11-15).** Un acto del mercado es publicar un listado, elegir una contraparte,
+negociar, fijar un precio, firmar, activar, pagar, liberar, congelar o ir a la corte. Sólo los pares los
+hacen. Labs construye el software y hostea los servicios: corre el código y lo mantiene disponible, sin
+decidir sobre un listado, un usuario o un deal. Los servicios aceptan o rechazan un pedido sólo con reglas
+publicadas, que el código aplica igual a todos. Cuando el relayer o el keeper mandan una transacción, el
+acto es de la parte que la pidió. Lo único que Labs fija por su cuenta son los límites técnicos contra el
+abuso (pedidos por minuto de una IP o de una clave), iguales para todos y sin leer el contenido.
 
 ### 3.3 Los cuatro flujos de dinero
 
@@ -308,8 +317,12 @@ argumento, no una sentencia.
 - **El código se copia.** Cualquiera puede desplegar el mismo kernel con fee cero (`Escrow(0, 0, 0)`). El foso no es el
   contrato: es la reputación que la gente construyó, la calidad de los módulos oficiales y la confianza.
 - **Labs no puede ser el marketplace.** Juntar comprador con vendedor, llevar un libro de órdenes o
-  guardar la cuenta bancaria es el negocio de un exchange. Puede existir, a nombre de otra entidad que lo
-  asuma y lo licencie.
+  guardar la cuenta bancaria es el negocio de un exchange. En la plataforma no lo hace nadie: los pares se
+  encuentran en un tablero público con reglas publicadas, que Labs hostea sin decidir sobre él
+  (2026-11-15).
+- **Nadie modera el tablero.** Un listado aceptado no se retira, no se oculta y no se cambia: el tablero
+  rechaza al publicar lo que no cumple el formato, y después sólo el autor lo cambia. Un listado con datos
+  de contacto que el filtro no detectó queda hasta que su autor lo retire o deje de estar vigente.
 
 ### 3.7 Qué exposición queda de cada lado
 
@@ -317,10 +330,10 @@ argumento, no una sentencia.
 | --- | --- |
 | **El kernel** | Ninguna de operador, mientras se sostengan los chequeos de 3.8: no hay tesorería, administrador ni un fee que alguien pueda mover |
 | **La DAO** | La de una caja que recibe el fee del kernel y los fees opt-in (la tesorería), firma el MSA y ajusta, con topes y 30 días de aviso, los parámetros de los paquetes oficiales para los deals que vienen (el gobierno, 3.9). Es la que más cambia con el fee obligatorio: recibe algo de cada operación. Se mantiene ahí mientras el tesoro siga chico, Labs no alcance solo para moverla y ningún verbo suyo alcance un deal activado |
-| **Labs** | La de quien publica software y tiene empleados. No llega a la de un exchange mientras no haya custodia, matching ni contacto con el fiat |
+| **Labs** | La de quien publica software, hostea servicios y tiene empleados. No llega a la de un exchange mientras no haya custodia, matching, contacto con el fiat ni decisiones sobre el tablero |
 | **Cada Sponsor** | La de su pool ante el régimen que le toque. La factory no le pasa esa carga a nadie |
 | **Las partes** | El fiat reversible |
-| **Quien arme el descubrimiento de contrapartes** | La puerta. Conviene que tenga nombre, negocio y licencia propios |
+| **El tablero** | No tiene operador (2026-11-15). Sus reglas son públicas, la DAO decide sus parámetros y el código los aplica igual a todos. Labs lo hostea; un tercero puede hostear una copia. Que un host sin discreción no opera un exchange lo confirma el abogado antes de mainnet (`PLATAFORMA.md` OD-02) |
 
 ### 3.8 Cómo se nota que el modelo se rompió
 
@@ -337,6 +350,10 @@ Se verifica mirando el código, los dos contratos de la DAO y el contrato firmad
   Labs mueva sola.
 - La invoice de Labs es una cifra por período, nunca un porcentaje del volumen.
 - Nada de lo que hacen la DAO o Labs pausa, desvía o impide un deal que ya tiene la cripto adentro.
+- Labs no retira, oculta ni cambia un listado aceptado, y nadie en Labs tiene una herramienta para
+  hacerlo.
+- Los parámetros del mercado los decide la DAO; Labs los aplica, y un release no los cambia sin esa
+  decisión.
 - La DAO no tiene ninguna función que reciba un `dealId`, mueva un token o pause algo. Su único verbo
   on-chain es proponer o cancelar términos dentro de topes fijos, y los aplica cualquiera después de 30
   días.
@@ -372,6 +389,7 @@ así que el que firmaron ya no resuelve (`UnknownPackage`). Nadie queda ligado a
 | **Prueba de pago** (`PaymentProof`) | El fee por prueba | Igual. El verificador no se gobierna: qué pagos cuentan es un adaptador nuevo, nunca un voto |
 | **El set oficial** | Qué kernel, paquetes, factory de pools, verificadores, adaptadores de rail (con sus claves fijas, `PinnedAnchors`) y rampas recomienda el cliente oficial | Una decisión de la DAO, que el cliente lee (`PLATAFORMA.md` TRN-01). Alguien tiene que rotar lo que vence (las claves fijas de un rail tienen `sunset`) y reemplazar lo que tenga un bug |
 | **El tesoro** | El MSA con Labs y los grants | Como hasta ahora |
+| **La plataforma** (2026-11-15) | Los parámetros del mercado: listados y engagements abiertos por clave, retención de datos, monedas, rails y relojes por defecto, formato y orden de los resultados, gas del relayer y del keeper | Una decisión de la DAO fuera de la chain que el MSA obliga a Labs a aplicar (`PLATAFORMA.md` 1.3.1). No toca un deal ni un contrato |
 
 La mecánica es una sola (`Governed`): un `governor` inmutable (cero = congelado para siempre), la
 propuesta tipada de cada paquete, `GOVERNANCE_DELAY = 30 días` y la aplicación permissionless. El
@@ -596,12 +614,14 @@ abierto. Para 10 M/mes en deals de dos días con panel de tres hacen falta ~200.
 
 ### 4.4 Lo que se puede y no se puede prometer
 
-**Se puede decir:** Labs es el equipo que mantiene la infraestructura de referencia, cobrado por una DAO
-con un tesoro y un contrato; los módulos oficiales generan fees cuando la gente los elige, y esos fees
+**Se puede decir:** Labs es el equipo que mantiene y hostea la infraestructura de referencia, sin decidir
+sobre el mercado, cobrado por una DAO con un tesoro y un contrato; los módulos oficiales generan fees
+cuando la gente los elige, y esos fees
 reponen el tesoro.
 
 **No se puede decir:** que controlamos el protocolo, que cobramos un take rate sobre el volumen, que el
-fee se puede prender por gobierno, que podemos apagarlo en una crisis, que el pago fiat está garantizado,
+fee se puede prender por gobierno, que podemos apagarlo en una crisis, que moderamos o curamos los
+listados, que el pago fiat está garantizado,
 o que "el tribunal nos protege" como si fuera infalible. Un modelo que multiplique volumen total por un
 porcentaje nuestro describe otro producto.
 
@@ -616,7 +636,8 @@ porcentaje nuestro describe otro producto.
 3. El MSA: cifra por período y prohibiciones como obligaciones —no juntar contrapartes, no llevar libro
    de órdenes, no guardar la cuenta donde cae el fiat, no cobrar peaje de interfaz, no pausar ni impedir
    un deal, no ser `feeRecipient` ni el sink, no tener votos ni firmas suficientes para mover el tesoro
-   sola— y una rescisión que no le pide nada al código.
+   sola, no retirar ni cambiar un listado aceptado, no fijar un parámetro del mercado sino aplicar el que
+   decide la DAO— y una rescisión que no le pide nada al código.
 4. El kernel oficial con la tesorería como `feeRecipient` (0,3% + 0,3%), y el primer juego de paquetes
    oficiales con el mismo destinatario y con el gobierno como `governor`. Hoy los deploys de testnet usan
    direcciones de relleno (`0xFEE` la tesorería, `0xDA0` el gobierno, `0xdeaD` el sink), que nunca son
@@ -1688,7 +1709,7 @@ Fuera del `PAYMENT_PROOF`, lo que separa el código de un producto operando:
 | **Custodia de `sk_id`** | Perderlo es perder reputación y bonds. Recuperación social: trabajo futuro |
 | **Unicidad por humano** | Dos juegos de stamps disjuntos de Passport dan dos cuentas. Diferido; verificar antes del lanzamiento si un stamp vencido puede anclar una wallet nueva |
 | **Liveness de Human Passport** | Es un proxy upgradeable y pausable de un tercero: si se pausa, no entra gente nueva |
-| **Quién ocupa el lugar del mercado** | El protocolo tiene el escrow y no el mercado, a propósito. Si lo ocupa Labs, Labs es la plataforma con licencia; si lo ocupa un tercero nombrado, es una puerta. Es una decisión de dirección |
+| **Quién ocupa el lugar del mercado** | Decidido el 2026-11-15: nadie. Labs hostea el tablero sin decidir sobre él y los pares hacen cada acto del mercado (3.2). Falta que el abogado confirme que un host sin discreción no opera un exchange (`PLATAFORMA.md` OD-02) |
 | **Rampa con compose** | La spec lo permite; el contrato hoy sólo hace envío directo |
 | **Hallazgos Low del análisis estático** | Zero-checks y shadowing: decisiones abiertas del kernel, no supresiones |
 | **Dry-run de deploy** | `forge script` sin broadcast igual escribe el JSON de deployments: correr simulaciones con el árbol limpio |
@@ -1730,6 +1751,7 @@ Las que más pesan para entender el diseño, en orden. Cada una tiene su entrada
 | 2026-10-05 | El pool es un peer: misma escalera, bond propio, operador verificado (cuenta + operador) | Un pool con capital y sin historia era la estafa más barata contra Providers; las reglas se escriben una vez |
 | 2026-10-06 | Tesorería y gobierno son dos contratos de la DAO: uno recibe sin permisos, el otro decide sin recibir | La tesorería no puede migrar nunca (el kernel la tiene inmutable); el gobierno sí, sin redesplegar, si es un timelock |
 | 2026-10-06 | La DAO ajusta los parámetros de los paquetes oficiales para los deals que vienen, con topes y 30 días de demora; el kernel guarda los precios de cada deal al activarlo | Los plazos, los incentivos y los precios se calibran con uso real, y un deploy nuevo por cada ajuste obligaba a mudar la reputación y los bonds de los árbitros |
+| 2026-11-15 | El mercado no tiene operador: Labs construye y hostea sin discreción, la DAO decide los parámetros y nadie retira un listado | Lo que separa a un host de un operador es la discreción: con reglas publicadas y aplicadas igual a todos, nadie abre ni cierra la puerta (3.1) |
 
 ---
 
@@ -1766,7 +1788,7 @@ Mercado inicial: Europa y Latam. El dolor es compartido: cuentas congeladas por 
 | Protocolo (kernel) | Máquina de estados + caja, inmutable | Una empresa, una plataforma, un servicio |
 | Partes del deal | Holder, Provider, Controller | Usuarios "de" alguien |
 | DAO | Contrato receptor (Governor con timelock, Safe u otro), recipient del fee del kernel y de los paquetes | Un operador, un gate, un actor del escrow |
-| PluriSwap Labs | Entidad de infraestructura (paquetes, backend, frontend) bajo MSA con la DAO | El dueño del protocolo, un exchange, un custodio |
+| PluriSwap Labs | Entidad de infraestructura (paquetes, backend, frontend) bajo MSA con la DAO; hostea los servicios y aplica los parámetros que decide la DAO | El dueño del protocolo, un exchange, un custodio, el operador del mercado |
 | Sponsors de pool | Operadores de liquidez de terceros, responsables de su propio cumplimiento | Perfiles del kernel |
 | Human Passport | Dependencia externa, elegida por firma en el `packageId` | Parte del protocolo |
 
@@ -1786,7 +1808,7 @@ Catorce principios. Si un diseño propuesto viola uno, no es una extensión: es 
 6. **El dinero se mueve con culpa probada, acuerdo probado o desacuerdo elegido.** Sin veredicto no hay slash: el bond nunca va a la contraparte sin un tribunal que lo diga. Dos casos sin veredicto tienen consecuencia igual, y ninguna premia a nadie. **Con tribunal**, abandonar una pelea que abriste es perderla: tenías la corte y no la usaste, y el principal va entero a la otra parte. **Sin tribunal**, las dos partes eligieron no tener quien decida: después de una disputa sólo quedan acuerdos de todo o nada (cancelar o liberar), y un desacuerdo que ninguna cede **quema el principal**, los locks de ambos van al sink y los dos quedan marcados. Nadie cobra por congelar, así que rendirse es la mejor respuesta de todo tramposo racional. Es un equilibrio débil —falla frente a un tramposo terco y una víctima que cede, medido en `SIMULACIONES.md`—, y por eso lo que alinea incentivos en el largo plazo es el tribunal.
 7. **El happy path paga lo mismo; desviarse cuesta.** El fee del kernel es igual para todo deal. Contest fee no-cero y sin devolución al ganador (una disputa implica que ambas partes fallaron en elegir contraparte). Completion fee sólo si el Provider cobró algo y el terminal no es `STALEMATE`. Refund y stalemate nunca pagan (tampoco el de un desacuerdo sin tribunal: ningún trade cerró); un dispute abandonado sí, porque un trade cerró.
 8. **La DAO ajusta, nunca opera.** El kernel nombra sólo a su tesorería, como `feeRecipient` inmutable, y sobre el kernel la DAO no tiene verbo: ni fija, ni cobra, ni niega su fee; lo barre cualquiera. Sobre un paquete oficial tiene a lo sumo un verbo acotado (`Governed`): proponer la política de los deals todavía no activados, dentro de topes fijos en el código, con una demora más larga que cualquier salida y aplicada por cualquiera (§3.9). Ese verbo es del gobierno de la DAO, que no recibe fees; la tesorería, que los recibe, no tiene ningún verbo (§3.2). El kernel copia los precios de cada deal al activarlo y el paquete guarda por deal lo que decide el resultado, así que nunca alcanza un deal activado, un activo, un resultado, quién entra o quién arbitra; nunca una pausa. Fee policy de paquete nueva = `packageId` nuevo + firmas nuevas; la del kernel, kernel nuevo.
-9. **Labs es infraestructura, no plataforma.** Backend read-only, open source, corrible por terceros, sin custodia de fondos ni claves, sin matching, sin contacto fiat. Cobra por MSA a la DAO; nunca es `feeRecipient`.
+9. **Labs es infraestructura, no plataforma.** Backend read-only, open source, corrible por terceros, sin custodia de fondos ni claves, sin matching, sin contacto fiat. No retira listados ni fija parámetros del mercado: los decide la DAO y Labs los aplica (Anexo R, 2026-11-15). Cobra por MSA a la DAO; nunca es `feeRecipient`.
 10. **Los pools son de sus Sponsors.** El protocolo no cobra por pools ni opera el descubrimiento. El cumplimiento de cada pool es local a quien lo abre.
 11. **Fees en el kernel o en el paquete, nunca en el deal.** El deal nombra IDs; el kernel y los paquetes nombran montos y recipients. Un clon con fee cero es otro hash, u otro kernel.
 12. **Un escritor, un motor.** El escrow escribe todo estado del deal y mueve todo principal. Credit-first: un `transfer` fallido no reescribe el terminal. EP-POST nunca revierte el escrow.
@@ -3141,6 +3163,7 @@ Registro fechado de decisiones cerradas. Una entrada posterior pisa a una anteri
 | 2026-10-27 | Una cuenta nueva puede atestar | Encontrado al construir el board: `attest_base` exigía `leaf_token == token` y la hoja génesis no tiene token hasta la primera activación, así que una cuenta recién registrada no podía publicar un listing (LST-02, LST-03) y un board nuevo no tenía quién publicara. Ahora una hoja sin token atesta cualquier token, pero sólo si todas sus estadísticas son cero (crédito, volumen, castigo, en vuelo y registro): dice T1, sin registro y sin castigo, que es la verdad de una cuenta sin deals. Una hoja con token sigue atestando sólo ese token. `attest_base` es off-chain: cambian su VK (`test/fixtures/vks/attest_base.json`, pin en `VerifierPins.t.sol`) y el proof de fixture; ningún contrato ni otro circuito |
 | 2026-10-27 | Una cuenta nueva puede probar su handle | El mismo hueco que `attest_base`, en `reveal_advanced`: el perfil avanzado que prueba el handle al abrir un deal room (PLATAFORMA ENG-11) exigía `leaf_token == token`, así que una cuenta sin deals no podía probar su handle y su primera negociación nunca llegaba a Agreed. Ahora la misma regla: una hoja sin token prueba su handle para cualquier token sólo si todas sus estadísticas son cero. Off-chain: cambian su VK y su pin, y el proof de fixture |
 | 2026-11-10 | Una attestation está atada al lugar que la lleva | Encontrado al evaluar la plataforma: `attest_base` no tenía un input público que la atara a quien la presenta. Los listados son públicos, así que cualquiera podía copiar la attestation de una cuenta T5 limpia en un listado propio, publicado con una clave de plataforma nueva, que no cuesta nada. El board la verificaba bien, y el lector se enteraba recién en el deal room, con la prueba de handle del 2026-10-02. Llenar el board de listados con reputación ajena no costaba nada. **La regla**: `attest_base` gana el input público `context`. Quien consume lo calcula con lo que lleva la attestation (el listado y la clave que lo publica, o el engagement) y rechaza una attestation hecha para otro contexto o para cualquier lugar (`context = 0`). El circuito no lee `context`: lo ata el binding de los public inputs, el mismo cable que `expiry` y que el `requester` de `reveal_advanced`. Sólo el dueño de `sk_id` puede producir un proof para un contexto nuevo. **Lo que habilita**: un servicio puede contar por `handleCommit` (listados vivos, engagements abiertos), porque una attestation copiada ya no gasta el cupo de otra cuenta. **Lo que no cambia**: la prueba de handle del deal room sigue: el contexto ata a un lugar, no a una conversación. `attest_base` es off-chain: cambian su VK (`test/fixtures/vks/attest_base.json`, pin en `VerifierPins.t.sol`), el proof de fixture, los vectores (`attest.context`) y la lib (`verify.ts`: `opts.context`). Ningún contrato ni otro circuito. Tests: 14 de Noir en el crate, 109 de bun (un contexto ajeno y el contexto cero rompen `bb verify` con el proof real) |
+| 2026-11-15 | **Cierra el pendiente del lugar del mercado (7)** — el mercado no tiene operador | Quedaba abierto quién ocupa el lugar del mercado: Labs con licencia, o un tercero nombrado como puerta. La pregunta del regulador (3.1) busca a quien cobra de cada operación o puede abrir y cerrar la puerta; lo que separa a un host de un operador es la discreción. **La regla**: Labs construye el software y hostea los servicios bajo el MSA. No hace ningún acto del mercado (publicar, elegir contraparte, negociar, fijar precio, firmar, activar, pagar, liberar, congelar, ir a la corte): los hacen los pares. El tablero no retira, no oculta y no cambia un listado aceptado; rechaza al publicar lo que no cumple el formato, y lo único automático es marcar "no vigente" a un listado cuya attestation venció o cuya raíz ya no vale. Los parámetros del mercado (límites, retención, monedas, rails, relojes por defecto, orden de los resultados, gas) los decide la DAO y Labs los aplica; un release no los cambia sin esa decisión. Labs fija sólo los límites técnicos contra el abuso, iguales para todos y sin leer el contenido. Labs vende premium, una suscripción plana que no cambia el orden, la visibilidad, un fee ni una acción del protocolo. **Lo que suma el MSA**: no retirar ni cambiar un listado y no fijar un parámetro del mercado. **Lo que no cambia**: el kernel, los paquetes y la DAO on-chain. **Pendiente**: que el abogado confirme que un host sin discreción no opera un exchange (`PLATAFORMA.md` OD-01, OD-02) |
 
 ### R.3 Citas a documentos que ya no existen
 
