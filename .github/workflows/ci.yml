@@ -121,21 +121,35 @@ jobs:
         with:
           sarif_file: ${{ steps.slither.outputs.sarif }}
 
-  aderyn:
-    name: aderyn (fail on high)
+  wake:
+    # The second static analyzer, a different implementation from Slither. Wake replaced Aderyn, which Cyfrin
+    # retired: its downloads were withdrawn in 2026-11. Wake and its dependencies are pinned with hashes, so this
+    # job installs the same files even if new releases stop. Config in wake.toml (reports on src/ only).
+    name: wake (fail on high)
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - uses: foundry-rs/foundry-toolchain@v1
+
+      - uses: actions/setup-python@v5
         with:
-          version: ${{ env.FOUNDRY_VERSION }}
-      - run: forge build
-      - uses: Cyfrin/aderyn-ci@v0
-        with:
-          fail-on: high
+          python-version: '3.12'
+
+      - name: install wake (pinned, hashed)
+        run: pip install --require-hashes -r .github/wake-requirements.txt
+
+      # Exit 0: no detection; 3: detections (the gate below judges them); 2: compile error.
+      - name: wake detect all
+        run: |
+          rc=0
+          wake detect --export json all || rc=$?
+          if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then exit "$rc"; fi
+
+      # Fails on a High detection not triaged in wake-triage.toml, and on a stale triage entry.
+      - name: gate on high
+        run: python .github/wake-gate.py
 
   e2e:
     # `forge test` exercises the contracts; until this job existed, nothing exercised the SCRIPTS --

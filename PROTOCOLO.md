@@ -1583,7 +1583,7 @@ el costo está en los inserts de los árboles (0,65–0,93 M cada uno), no en ve
   circuitos Noir y el twin JS), `script/` (deploy y deals), `test/` (un área del catálogo por archivo, más
   fuzz, invariantes y fork).
 - **CI en cada push**: formato, build con gate de margen de bytecode, la suite entera (unit, fuzz e
-  invariantes), Slither y Aderyn, gates de drift de los fixtures ZK, y `script/e2e.sh`: una chain fría,
+  invariantes), Slither y Wake, gates de drift de los fixtures ZK, y `script/e2e.sh`: una chain fría,
   el stack entero desplegado, los doce finales Core caminados y verificados contra los eventos, y el
   Doctor al final.
 - **Ley de TDD**: no hay código de producción sin un test que haya fallado primero por la razón correcta.
@@ -3012,7 +3012,7 @@ forge test                       # unit + fuzz (256 runs) + invariants (32 x 256
 FOUNDRY_PROFILE=ci forge test    # fuzz 2048, invariants 128 x 512
 ```
 
-CI (`.github/workflows/ci.yml`), en push y PR: `forge fmt --check`, `forge build --sizes` con gate de margen de bytecode (Escrow ≥ 1 KB bajo EIP-170; ~19,2 KB hoy, con 5,3 KB de margen (2026-09-29)), `forge test`, Slither (`--fail-medium`), Aderyn (`--fail-high`), y **`script/e2e.sh`**: anvil limpio, despliega el stack entero (core → paquetes → pool → capa privada), camina CASE-CORE-03..15, verifica contra los eventos que aterrizaron que hay doce terminales y que cada uno conserva el principal, y cierra con `Doctor.s.sol`. Con `RPC_URL` + `DEPLOY_KEY` el mismo script apunta a una chain real y agrega la rampa Stargate, que no puede existir en anvil; con `ETHERSCAN_API_KEY` además verifica el source en el explorer. Un deploy de testnet no debería ser ocho comandos tipeados en el orden correcto, ni dejar un muro de bytecode sin verificar. `forge test` ejercita los contratos; nada ejercitaba los *scripts*, y dos estuvieron rotos meses por eso (§E.5.6). Nightly con perfil `ci`. Exclusiones de análisis estático triaged inline en `slither.config.json` / `aderyn.toml`; los Low restantes (zero-checks, shadowing) son decisiones abiertas del kernel, no supresiones.
+CI (`.github/workflows/ci.yml`), en push y PR: `forge fmt --check`, `forge build --sizes` con gate de margen de bytecode (Escrow ≥ 1 KB bajo EIP-170; ~19,2 KB hoy, con 5,3 KB de margen (2026-09-29)), `forge test`, Slither (`--fail-medium`), Wake (falla con todo High que no esté en `wake-triage.toml`), y **`script/e2e.sh`**: anvil limpio, despliega el stack entero (core → paquetes → pool → capa privada), camina CASE-CORE-03..15, verifica contra los eventos que aterrizaron que hay doce terminales y que cada uno conserva el principal, y cierra con `Doctor.s.sol`. Con `RPC_URL` + `DEPLOY_KEY` el mismo script apunta a una chain real y agrega la rampa Stargate, que no puede existir en anvil; con `ETHERSCAN_API_KEY` además verifica el source en el explorer. Un deploy de testnet no debería ser ocho comandos tipeados en el orden correcto, ni dejar un muro de bytecode sin verificar. `forge test` ejercita los contratos; nada ejercitaba los *scripts*, y dos estuvieron rotos meses por eso (§E.5.6). Nightly con perfil `ci`. Exclusiones de análisis estático triaged inline en `slither.config.json` / `wake-triage.toml`; los Low restantes (zero-checks, shadowing) son decisiones abiertas del kernel, no supresiones.
 
 Invariant handlers con `fail_on_revert = true`: guardan sus propias precondiciones, así que cualquier revert en campaña es hallazgo de kernel. Fork tests sólo con `ARBITRUM_RPC_URL`; `HUMAN_WALLET` agrega el path positivo de Passport.
 
