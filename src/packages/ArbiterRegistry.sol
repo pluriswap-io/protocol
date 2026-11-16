@@ -317,6 +317,8 @@ contract ArbiterRegistry is ICourt, EIP712, Governed {
         return _policy;
     }
 
+    // Wake: zero when nothing is pending; callers read pendingAt.
+    // wake-disable-next-line missing-return
     function pendingPolicy() external view returns (Policy memory p) {
         if (pendingAt != 0) p = abi.decode(_pendingPolicy, (Policy));
     }

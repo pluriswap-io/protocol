@@ -3,6 +3,8 @@ pragma solidity ^0.8.28;
 
 import {Poseidon} from "./Poseidon.sol";
 
+// Wake: the Solidity twin of the circuits' commitments; test/PrivacyCommitments.t.sol pins parity.
+// wake-disable unused-function
 /// @title PrivacyCommitments
 /// @notice The canonical commitments of the private layer (PROTOCOLO.md §E.3.15.3, as amended
 ///         by the canonical-encoding decision) — the Solidity twin of the JS twin

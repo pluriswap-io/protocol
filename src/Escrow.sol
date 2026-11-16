@@ -502,6 +502,8 @@ contract Escrow is EIP712, ReentrancyGuardTransient, IEscrow {
         if (d.status != Status.FUNDED) revert WrongStatus();
         if ((d.pkgs & Packages.ZK) == 0) revert PackageNotSelected();
         (IPaymentProof module, uint256 fee, address to) = Packages.zk(d);
+        // Wake: nonReentrant entrypoint. The module reverts on a bad proof and records the nullifier itself.
+        // wake-disable-next-line reentrancy, unchecked-return-value
         module.verifyProof(dealId, proof);
         uint256 left = _invoice(dealId, Packages.FeeKind.Proof, d.terms.principal, fee, d.terms.token, to);
         _close(dealId, d, left, _released());
@@ -520,6 +522,8 @@ contract Escrow is EIP712, ReentrancyGuardTransient, IEscrow {
             Clocks.requireStrictlyBefore(d.disputedAt, d.terms.disputeDuration);
         }
         ICourt c = Packages.court(d);
+        // Wake: nonReentrant entrypoint.
+        // wake-disable-next-line reentrancy
         c.openCourt{value: msg.value}(dealId, msg.sender);
         emit Transitioned(dealId, d.status, Status.ARBITRATION_ACTIVE);
         d.status = Status.ARBITRATION_ACTIVE;

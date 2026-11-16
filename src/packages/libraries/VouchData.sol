@@ -25,6 +25,8 @@ library VouchData {
         (, inputs, proof) = abi.decode(data, (bytes32, IBundleVerifier.VouchInputs, bytes));
     }
 
+    // Wake: the encoder of the vouch data; tests and off-chain code use it.
+    // wake-disable-next-line unused-function
     function encode(IBundleVerifier.VouchInputs memory inputs, bytes memory proof)
         internal
         pure

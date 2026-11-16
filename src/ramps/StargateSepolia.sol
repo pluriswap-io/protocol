@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.28;
 
+// Wake: constants for script/RampDeal.s.sol and the e2e.
+// wake-disable unused-contract
 /// @dev Stargate V2 USDC on Arbitrum Sepolia. Not Circle's other test USDC.
 library StargateSepolia {
     address internal constant USDC_POOL = 0x543BdA7c6cA4384FE90B1F5929bb851F52888983;

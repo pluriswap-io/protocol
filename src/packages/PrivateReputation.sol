@@ -344,6 +344,8 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
             }
             pairTagOf[dealId] = inputs.pairTag;
             _poolDealOf[inputs.dealSubject] = dealId;
+            // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+            // wake-disable-next-line unchecked-return-value
             accountTree.insert(inputs.newLeaf);
         } else {
             _admitSide(dealId, inputs.newLeaf, inputs.pairTag, inputs.verified);
@@ -462,6 +464,8 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
         bytes32[] memory leaves = new bytes32[](2);
         leaves[0] = first;
         leaves[1] = leaf;
+        // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+        // wake-disable-next-line unchecked-return-value
         accountTree.insertMany(leaves);
     }
 
@@ -582,6 +586,8 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
             revert ClaimProofFailed();
         }
         accountTree.spend(nullRep);
+        // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+        // wake-disable-next-line unchecked-return-value
         accountTree.insert(newLeaf);
         claimed[dealSubject] = true;
         delete pending[dealSubject];
@@ -620,6 +626,8 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
         return _fees;
     }
 
+    // Wake: zero when nothing is pending; callers read pendingAt.
+    // wake-disable-next-line missing-return
     function pendingFees() external view returns (Fees memory f) {
         if (pendingAt != 0) f = abi.decode(_pendingPolicy, (Fees));
     }

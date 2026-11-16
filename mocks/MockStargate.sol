@@ -23,6 +23,7 @@ contract MockStargate is IStargate {
     address public immutable token;
     uint256 public immutable nativeFee;
     uint256 public immutable haircut;
+    uint64 public sends;
 
     constructor(address token_, uint256 nativeFee_, uint256 haircut_) {
         token = token_;
@@ -47,8 +48,11 @@ contract MockStargate is IStargate {
     function sendToken(SendParam calldata sendParam, MessagingFee calldata fee, address refundAddress)
         external
         payable
-        returns (MessagingReceipt memory, OFTReceipt memory receipt, Ticket memory)
+        returns (MessagingReceipt memory msgReceipt, OFTReceipt memory receipt, Ticket memory)
     {
+        // A distinct message id per send, as LayerZero assigns one.
+        msgReceipt.nonce = ++sends;
+        msgReceipt.guid = keccak256(abi.encode(address(this), msgReceipt.nonce));
         if (msg.value < fee.nativeFee) revert InsufficientNativeFee();
         IERC20(token).safeTransferFrom(msg.sender, address(this), sendParam.amountLD);
         address to = address(uint160(uint256(sendParam.to)));
