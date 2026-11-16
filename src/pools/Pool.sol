@@ -126,6 +126,8 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     mapping(address account => bool) public designated;
     mapping(address account => bool) public allowedDepositor;
     mapping(address account => uint256) public sharesOf;
+    // Wake: the compiled getter returns the whole struct, terms.packageIds included (see the ABI).
+    // wake-disable-next-line complex-struct-getter
     mapping(uint256 nonce => Auth) public auths;
     mapping(bytes32 digest => uint256 nonce) public nonceOf;
     mapping(uint256 nonce => uint256 indexPlusOne) internal liveAt;
@@ -229,6 +231,10 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
         bondVault = vault;
         idle -= amount;
         IERC20(token).forceApprove(vault, amount);
+        // Wake: nonReentrant. The functions without the guard that write state take only a Sponsor, an agent
+        // or the Controller of the authorization: a callee that reenters them could call them directly. _sync
+        // returns early once `life` left ACTIVE/DEFICIENT. The same holds for withdrawBond and the two pulls.
+        // wake-disable-next-line reentrancy
         IPoolBonds(vault).depositPool(address(this), token, amount);
         emit BondFunded(vault, amount);
         _sync();
@@ -239,6 +245,8 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
         if (!sponsors[msg.sender]) revert Unauthorized();
         if (bondVault == address(0)) revert WrongVault();
         uint256 before = IERC20(token).balanceOf(address(this));
+        // Wake: nonReentrant; books only the balance that arrives. See fundBond.
+        // wake-disable-next-line reentrancy
         IPoolBonds(bondVault).withdrawPool(token, amount);
         uint256 received = IERC20(token).balanceOf(address(this)) - before;
         idle += received;
@@ -334,6 +342,8 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     /// @notice Fetches a payout the escrow could not push to this pool (a paused or blacklisting token). The books
     ///         already count it — `_onHand` includes the escrow credit — so this moves it, it does not create it.
     function pullEscrowCredit() external nonReentrant {
+        // Wake: nonReentrant; the callee is the official escrow. See fundBond.
+        // wake-disable-next-line reentrancy
         IEscrowCredit(escrow).withdraw(token);
         _sync();
     }
@@ -344,6 +354,8 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     function pullCourtCredit(address court) external nonReentrant {
         if (!isAgent(msg.sender)) revert Unauthorized();
         uint256 before = IERC20(token).balanceOf(address(this));
+        // Wake: nonReentrant; books only the balance that arrives. See fundBond.
+        // wake-disable-next-line reentrancy
         ICourtCredit(court).withdrawCredit();
         idle += IERC20(token).balanceOf(address(this)) - before;
         _sync();
@@ -493,6 +505,8 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
         // The kernel's own resolution, run before anything is reserved. Every signed id must be matched to a
         // named module, so `mods.reputation == address(0)` on a deal that carries REPUTATION reverts here
         // instead of becoming an unpriced reservation. Fail closed while nothing has moved yet.
+        // Wake: run as a check only.
+        // wake-disable-next-line unchecked-return-value
         Packages.resolve(t.packageIds, t.fiatCommit, mods);
         if (maxPrincipal != 0 && t.principal > maxPrincipal) revert OverLimit();
         if (maxControllerExposure != 0 && controllerOpen[t.controller] + t.principal > maxControllerExposure) {

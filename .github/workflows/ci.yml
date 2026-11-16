@@ -125,7 +125,9 @@ jobs:
     # The second static analyzer, a different implementation from Slither. Wake replaced Aderyn, which Cyfrin
     # retired: its downloads were withdrawn in 2026-11. Wake and its dependencies are pinned with hashes, so this
     # job installs the same files even if new releases stop. Config in wake.toml (reports on src/ only).
-    name: wake (fail on high)
+    # Every reviewed detection is suppressed next to its code: a `// Wake: <reason>` line, then a
+    # `// wake-disable-next-line <detector>` (or a `wake-disable` block for code that only tests use).
+    name: wake (fail on any finding)
     runs-on: ubuntu-latest
     if: github.event_name != 'schedule'
     steps:
@@ -140,16 +142,9 @@ jobs:
       - name: install wake (pinned, hashed)
         run: pip install --require-hashes -r .github/wake-requirements.txt
 
-      # Exit 0: no detection; 3: detections (the gate below judges them); 2: compile error.
+      # Exit 0: no detection left once the suppressions apply; 3: a detection nobody reviewed; 2: compile error.
       - name: wake detect all
-        run: |
-          rc=0
-          wake detect --export json all || rc=$?
-          if [ "$rc" -ne 0 ] && [ "$rc" -ne 3 ]; then exit "$rc"; fi
-
-      # Fails on a High detection not triaged in wake-triage.toml, and on a stale triage entry.
-      - name: gate on high
-        run: python .github/wake-gate.py
+        run: wake detect all
 
   e2e:
     # `forge test` exercises the contracts; until this job existed, nothing exercised the SCRIPTS --

@@ -36,6 +36,8 @@ contract PoolFactory {
         uint16 controllerFeeBps
     ) external returns (address pool) {
         pool = Clones.clone(implementation);
+        // Wake: the callee is a fresh clone of the official implementation; initialize makes no external call.
+        // wake-disable-next-line reentrancy
         Pool(pool).initialize(sponsors, token, escrow, controllers, openDeposits, depositors, controllerFeeBps);
         created[pool] = true;
         emit PoolCreated(pool, token, escrow, openDeposits);

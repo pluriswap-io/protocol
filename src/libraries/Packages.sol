@@ -58,6 +58,7 @@ library Packages {
     error PackageRequired();
     error PeerMismatch();
     error SameSubject();
+    error SubjectMismatch();
     error FiatCommitRequired();
 
     // --- activation ----------------------------------------------------------------------------------
@@ -65,6 +66,8 @@ library Packages {
     /// @dev Every module the relayer names must hash to a signed id, and every signed id must be matched.
     ///      `PAYMENT_PROOF` proves a payment against the signed fiat leg, so it cannot run without one.
     ///      The prices each id hashes are returned as the deal's copy: what the kernel charges from here on.
+    // Wake: an empty id list resolves to no package.
+    // wake-disable-next-line missing-return
     function resolve(bytes32[] memory ids, bytes32 fiatCommit, PackageMods memory mods)
         public
         view
@@ -138,6 +141,8 @@ library Packages {
     ///      Each hook about a side receives that side's opaque package data (Anexo R, 2026-09-29).
     ///      Every fee is the copy `resolve` validated, never a re-read: `admit` and `bind` are not `view`, and a module
     ///      that answered one policy while it was checked cannot be paid by another.
+    // Wake: without PASSPORT the subjects stay zero, and nothing reads them (REP and BONDS require it).
+    // wake-disable-next-line missing-return
     function engage(
         DealTerms memory t,
         uint8 pkgs,
@@ -147,7 +152,10 @@ library Packages {
         PackagePrices memory p
     ) public returns (bytes32 subjectH, bytes32 subjectP) {
         if ((pkgs & PASSPORT) != 0) {
+            // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+            // wake-disable-next-line reentrancy
             subjectH = IPassport(mods.passport).identify(t.holder, t.controller, dealId, data.holder);
+            // wake-disable-next-line reentrancy
             subjectP = IPassport(mods.passport).identify(t.provider, t.provider, dealId, data.provider);
             // Two wallets, ONE account: the cheapest reputation farm there is, and until now nothing
             // stopped it. In the private layer `dealSubject = Poseidon(sk_id, dealId)` is deterministic,
@@ -159,8 +167,15 @@ library Packages {
         if ((pkgs & REP) != 0) {
             IReputation r = IReputation(mods.reputation);
             address v = (pkgs & BONDS) != 0 ? mods.bonds : address(0);
-            r.admit(t.holder, dealId, t.token, t.principal, v, data.holder);
-            r.admit(t.provider, dealId, t.token, t.principal, v, data.provider);
+            // The module books each side under the subject it returns, and the bond vault reserves under the
+            // Passport's. They agree by construction (the same side data, the same proof); a module that broke
+            // that would split one account's reputation from its bond, so the kernel checks.
+            // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+            // wake-disable-next-line reentrancy
+            bytes32 admittedH = r.admit(t.holder, dealId, t.token, t.principal, v, data.holder);
+            // wake-disable-next-line reentrancy
+            bytes32 admittedP = r.admit(t.provider, dealId, t.token, t.principal, v, data.provider);
+            if (admittedH != subjectH || admittedP != subjectP) revert SubjectMismatch();
             uint256 fee = share(t.principal, p.repActivationBps);
             if (fee != 0) {
                 Settlement.pullExact(t.token, t.holder, fee);
@@ -170,7 +185,10 @@ library Packages {
         }
         if ((pkgs & BONDS) != 0) {
             IBondVault vault = IBondVault(mods.bonds);
+            // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+            // wake-disable-next-line reentrancy
             vault.reserve(subjectH, t.token, dealId, t.principal, data.holder);
+            // wake-disable-next-line reentrancy
             vault.reserve(subjectP, t.token, dealId, t.principal, data.provider);
         }
         if ((pkgs & ARB) != 0) _engageCourt(t, dealId, ICourt(mods.court), data, p.courtActivationBps);
@@ -186,6 +204,8 @@ library Packages {
             IERC20(t.token).safeTransfer(address(c), fee);
             emit FeeCharged(dealId, FeeKind.Activation, address(c), fee);
         }
+        // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+        // wake-disable-next-line reentrancy
         c.bind(dealId, t, fee, data.court, data.holder, data.provider);
     }
 
@@ -293,6 +313,8 @@ library Packages {
 
     /// @dev Which post-terminal calls this deal owes, from its bound kinds and the terminal's bond action.
     ///      `Unlock` is one call per subject; burn, slash and share take both subjects in a single call.
+    // Wake: zero means that nothing is owed.
+    // wake-disable-next-line missing-return
     function postTerminalOwed(Deal storage d, BondAction bond) public view returns (uint8 owed) {
         if ((d.pkgs & REP) != 0) owed = POST_NOTIFY_H | POST_NOTIFY_P;
         if ((d.pkgs & BONDS) != 0) owed |= bond == BondAction.Unlock ? POST_BOND_A | POST_BOND_B : POST_BOND_A;
@@ -327,11 +349,15 @@ library Packages {
         if ((left & (POST_NOTIFY_H | POST_NOTIFY_P)) != 0 && (d.pkgs & REP) != 0) {
             IReputation r = IReputation(d.mods.reputation);
             if ((left & POST_NOTIFY_H) != 0) {
+                // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                // wake-disable-next-line reentrancy
                 try r.notifyTerminal(d.subjectH, d.subjectP, t.token, t.principal, IReputation.Close(closeH)) {
                     left &= ~POST_NOTIFY_H;
                 } catch {}
             }
             if ((left & POST_NOTIFY_P) != 0) {
+                // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                // wake-disable-next-line reentrancy
                 try r.notifyTerminal(d.subjectP, d.subjectH, t.token, t.principal, IReputation.Close(closeP)) {
                     left &= ~POST_NOTIFY_P;
                 } catch {}
@@ -355,11 +381,15 @@ library Packages {
             BondAction bond = BondAction(bondAction);
             if (bond == BondAction.Unlock) {
                 if ((left & POST_BOND_A) != 0) {
+                    // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                    // wake-disable-next-line reentrancy
                     try vault.unlock(d.subjectH, t.token, dealId) {
                         left &= ~POST_BOND_A;
                     } catch {}
                 }
                 if ((left & POST_BOND_B) != 0) {
+                    // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                    // wake-disable-next-line reentrancy
                     try vault.unlock(d.subjectP, t.token, dealId) {
                         left &= ~POST_BOND_B;
                     } catch {}
@@ -368,18 +398,26 @@ library Packages {
                 bool done;
                 (address feeTo, uint256 feeBps) = _courtCut(d);
                 if (bond == BondAction.Burn) {
+                    // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                    // wake-disable-next-line reentrancy
                     try vault.burn(d.subjectH, d.subjectP, t.token, dealId) {
                         done = true;
                     } catch {}
                 } else if (bond == BondAction.Shared) {
+                    // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                    // wake-disable-next-line reentrancy
                     try vault.share(d.subjectH, d.subjectP, t.token, dealId, feeTo, feeBps) {
                         done = true;
                     } catch {}
                 } else if (bond == BondAction.HolderWins) {
+                    // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                    // wake-disable-next-line reentrancy
                     try vault.slash(d.subjectP, d.subjectH, t.token, dealId, t.holder, feeTo, feeBps) {
                         done = true;
                     } catch {}
                 } else {
+                    // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
+                    // wake-disable-next-line reentrancy
                     try vault.slash(d.subjectH, d.subjectP, t.token, dealId, t.provider, feeTo, feeBps) {
                         done = true;
                     } catch {}

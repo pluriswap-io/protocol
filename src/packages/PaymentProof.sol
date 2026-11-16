@@ -70,6 +70,8 @@ contract PaymentProof is IPaymentProof, Governed {
         return PackageId.zk(address(this), address(verifier), feeRecipient, verifyFee);
     }
 
+    // Wake: zero when nothing is pending; callers read pendingAt.
+    // wake-disable-next-line missing-return
     function pendingVerifyFee() external view returns (uint256 fee) {
         if (pendingAt != 0) fee = abi.decode(_pendingPolicy, (uint256));
     }

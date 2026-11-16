@@ -6,6 +6,8 @@ import {SignatureChecker} from "@openzeppelin/contracts/utils/cryptography/Signa
 import {PinnedAnchors} from "./PinnedAnchors.sol";
 import {IPaymentVerifier} from "../interfaces/IPaymentVerifier.sol";
 
+// Wake: the base of the rail adapters; test/RailKeys.t.sol exercises it.
+// wake-disable unused-contract, unused-function
 /// @title RailKeys
 /// @notice Which keys count for a deal (PROTOCOLO.md §E.3.12.1, Anexo R 2026-09-24): the adapter's pinned
 ///         defaults, plus any key the deal's Holder approved for that deal. Every rail adapter inherits it.

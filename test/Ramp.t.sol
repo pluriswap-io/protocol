@@ -91,6 +91,18 @@ contract RampTest is Test {
         assertEq(address(ramp).balance, 0);
     }
 
+    /// The sender follows the transfer on the destination chain by the LayerZero message id.
+    function test_stargateRamp_send_emitsTheMessageId() public {
+        MockStargate pool = new MockStargate(address(token), NATIVE_FEE, 1_000);
+        StargateV2Ramp ramp = new StargateV2Ramp(address(pool));
+        _approve(user, address(ramp));
+        uint256 out = AMOUNT - 1_000;
+        vm.expectEmit(address(ramp));
+        emit StargateV2Ramp.Sent(keccak256(abi.encode(address(pool), uint64(1))), user, DEST, destWallet, AMOUNT, out);
+        vm.prank(user);
+        ramp.send{value: NATIVE_FEE}(_intent(AMOUNT, out));
+    }
+
     function test_stargateRamp_revertsIfTokenMismatch() public {
         MockStargate pool = new MockStargate(address(token), NATIVE_FEE, 0);
         StargateV2Ramp ramp = new StargateV2Ramp(address(pool));

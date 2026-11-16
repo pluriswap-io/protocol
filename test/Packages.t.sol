@@ -163,6 +163,26 @@ contract PackagesTest is BaseTest {
         assertFalse(escrow.used(holder, 1));
     }
 
+    /// The bond vault reserves under the Passport's subject and the reputation module books under the one it
+    /// returns from `admit`. A module that answered another subject would split one account's reputation from
+    /// its bond: the kernel refuses the activation.
+    function test_admitSubjectNotThePassports_isRejected() public {
+        DriftReputation drift = new DriftReputation(passport, feeRecipient, 0, 0, address(escrow));
+        drift.setFakeSubject(keccak256("another account"));
+        DealTerms memory terms = _p2pTerms();
+        terms.packageIds = _sorted2(passport.packageId(), drift.packageId());
+        PackageMods memory mods;
+        mods.passport = address(passport);
+        mods.reputation = address(drift);
+        HolderAuthorization memory ha = _holderAuth(terms, 1);
+        ProviderAgreement memory pa = _providerAuth(terms, 1);
+        ControllerAcceptance memory ca;
+        bytes memory hs = _signHolder(ha);
+        bytes memory ps = _signProvider(pa);
+        vm.expectRevert(Packages.SubjectMismatch.selector);
+        escrow.activate(ha, hs, pa, ps, ca, "", mods);
+    }
+
     function test_noPassport_noAdmit() public {
         passport.setHuman(holder, bytes32(0));
         _fundBonds();
@@ -1510,6 +1530,13 @@ contract DriftReputation is IReputation {
         packageId = PackageId.reputation(address(this), feeRecipient_, activationFee_, completionFee_, 0, 0);
     }
 
+    /// @dev When set, `admit` answers this subject instead of the Passport's.
+    bytes32 public fakeSubject;
+
+    function setFakeSubject(bytes32 subject) external {
+        fakeSubject = subject;
+    }
+
     function setCompletionFee(uint256 fee) external {
         completionBps = fee;
         packageId = PackageId.reputation(address(this), feeRecipient, activationBps, fee, 0, 0);
@@ -1540,7 +1567,7 @@ contract DriftReputation is IReputation {
         returns (bytes32 subject)
     {
         if (msg.sender != operator) revert Unauthorized();
-        subject = passport.identify(wallet, wallet, bytes32(0), "");
+        subject = fakeSubject != bytes32(0) ? fakeSubject : passport.identify(wallet, wallet, bytes32(0), "");
     }
 
     function notifyTerminal(bytes32, bytes32, address, uint256, IReputation.Close) external {

@@ -1,4 +1,6 @@
-# Wake and its dependencies, pinned with hashes for the CI job `wake`. How to regenerate: .github/wake-gate.py.
+# Wake and its dependencies, pinned with hashes for the CI job `wake`. To change the version:
+#   echo 'eth-wake==X.Y.Z' | uv pip compile - --generate-hashes --python-version 3.12 \
+#     --python-platform x86_64-manylinux_2_28 --exclude-newer <two weeks ago> --no-header -o .github/wake-requirements.txt
 abch-tree-sitter==1.1.4 \
     --hash=sha256:04023cb92f525cd56b46755990f099e3562a0ca07083a932a3ef42dcda947a1d \
     --hash=sha256:0e02c4a8a2a690ad3d23ac78e9251c43218a3da56d5b2432efcf8876afc09793 \

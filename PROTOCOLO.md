@@ -1489,7 +1489,8 @@ Stargate lista en Arbitrum. Otra rampa (CCTP, Across) sería otro composer.
 
 **Por qué así.** La rampa cobra **cero** para el protocolo: el usuario paga sólo la infraestructura (fee
 de Stargate ~6 bps, gas, slippage). Un composer que se quedara un spread sería otro producto. Si Stargate
-cae, los deals fondeados siguen el catálogo Core. Hoy sólo hace envío directo (taxi), sin compose.
+cae, los deals fondeados siguen el catálogo Core. Hoy sólo hace envío directo (taxi), sin compose. Cada envío
+emite `Sent` con el `guid` del mensaje de LayerZero: con él el usuario sigue la transferencia en la chain de destino.
 
 ### 5.10 La privacidad, de punta a punta
 
@@ -2861,7 +2862,7 @@ Superficie v1: **stables que Stargate lista** en Arbitrum. ETH después. El kern
 
 **Costo.** La rampa no cobra para el protocolo: cero bps, cero recipient DAO. El usuario paga sólo infraestructura: fee de Stargate (o de la otra rampa), gas, slippage. Un composer que se quede un spread no es esta rampa; es otro producto.
 
-Estado actual del bytecode: taxi only, sin compose (la spec lo permite; `StargateV2Ramp` no lo implementa). No habla con el escrow.
+Estado actual del bytecode: taxi only, sin compose (la spec lo permite; `StargateV2Ramp` no lo implementa). No habla con el escrow. Cada envío emite `Sent(guid, sender, dest, to, amountSent, amountReceived)`: el `guid` es el id del mensaje de LayerZero, con el que se sigue la transferencia en la chain de destino.
 
 #### E.3.18 Verbos kernel→paquete y fallos
 
@@ -2870,7 +2871,7 @@ El kernel, en un punto nombrado, hace una de estas cosas. Nada más.
 | Verbo | Cuándo | Qué espera | Si falla |
 | --- | --- | --- | --- |
 | `identify` | Activación | Sujeto por Holder y por Provider | Reject atómico; no hay deal |
-| `admit` | Activación | `cap` del sujeto; `ok` si `inFlight + principal <= cap` | Reject atómico |
+| `admit` | Activación | `cap` del sujeto; `ok` si `inFlight + principal <= cap`. Devuelve el sujeto, que tiene que ser el de `identify` (`SubjectMismatch`) | Reject atómico |
 | `invoice` | Activación / contest-open / verificar / completion | `(amount, recipient, payer)` del **paquete**; en contest-open, de cada paquete seleccionado que lo declare | Reject si no se puede cobrar |
 | `reserveBond` | Activación | Lock `dealId → amount` en el vault del sujeto | Reject atómico |
 | `verifyProof` | `FUNDED` + ZK | `dealId` ok + `paymentNullifier` fresco de V | Ignore / reject; el deal no cambia |
@@ -2886,7 +2887,8 @@ Reglas duras: el paquete no devuelve receivers, outcomes, estados ni destinos de
 ```
 1. Verificar HolderAuthorization + Provider (+ ControllerAcceptance)
 2. identify     Passport → sujetoH, sujetoP
-3. admit        Reputación: cap(sujeto, bond?) ≥ inFlight + principal (por separado; gana el más chico)
+3. admit        Reputación: cap(sujeto, bond?) ≥ inFlight + principal (por separado; gana el más chico);
+                el sujeto que devuelve es el de identify, o revierte (SubjectMismatch)
 4. invoice      Reputación: fee de activación → recipient del paquete (0 en el oficial)
 5. reserveBond  lock en BondVault (10% de este principal)
 6. Pull exacto del principal + fee de activación del kernel desde el Holder; el fee queda en feesOwed
@@ -3012,7 +3014,7 @@ forge test                       # unit + fuzz (256 runs) + invariants (32 x 256
 FOUNDRY_PROFILE=ci forge test    # fuzz 2048, invariants 128 x 512
 ```
 
-CI (`.github/workflows/ci.yml`), en push y PR: `forge fmt --check`, `forge build --sizes` con gate de margen de bytecode (Escrow ≥ 1 KB bajo EIP-170; ~19,2 KB hoy, con 5,3 KB de margen (2026-09-29)), `forge test`, Slither (`--fail-medium`), Wake (falla con todo High que no esté en `wake-triage.toml`), y **`script/e2e.sh`**: anvil limpio, despliega el stack entero (core → paquetes → pool → capa privada), camina CASE-CORE-03..15, verifica contra los eventos que aterrizaron que hay doce terminales y que cada uno conserva el principal, y cierra con `Doctor.s.sol`. Con `RPC_URL` + `DEPLOY_KEY` el mismo script apunta a una chain real y agrega la rampa Stargate, que no puede existir en anvil; con `ETHERSCAN_API_KEY` además verifica el source en el explorer. Un deploy de testnet no debería ser ocho comandos tipeados en el orden correcto, ni dejar un muro de bytecode sin verificar. `forge test` ejercita los contratos; nada ejercitaba los *scripts*, y dos estuvieron rotos meses por eso (§E.5.6). Nightly con perfil `ci`. Exclusiones de análisis estático triaged inline en `slither.config.json` / `wake-triage.toml`; los Low restantes (zero-checks, shadowing) son decisiones abiertas del kernel, no supresiones.
+CI (`.github/workflows/ci.yml`), en push y PR: `forge fmt --check`, `forge build --sizes` con gate de margen de bytecode (Escrow ≥ 1 KB bajo EIP-170; ~19,2 KB hoy, con 5,3 KB de margen (2026-09-29)), `forge test`, Slither (`--fail-medium`), Wake (falla con todo hallazgo, de cualquier severidad, sin un `wake-disable` con su motivo en el código), y **`script/e2e.sh`**: anvil limpio, despliega el stack entero (core → paquetes → pool → capa privada), camina CASE-CORE-03..15, verifica contra los eventos que aterrizaron que hay doce terminales y que cada uno conserva el principal, y cierra con `Doctor.s.sol`. Con `RPC_URL` + `DEPLOY_KEY` el mismo script apunta a una chain real y agrega la rampa Stargate, que no puede existir en anvil; con `ETHERSCAN_API_KEY` además verifica el source en el explorer. Un deploy de testnet no debería ser ocho comandos tipeados en el orden correcto, ni dejar un muro de bytecode sin verificar. `forge test` ejercita los contratos; nada ejercitaba los *scripts*, y dos estuvieron rotos meses por eso (§E.5.6). Nightly con perfil `ci`. Exclusiones de análisis estático triaged en `slither.config.json` y en comentarios `wake-disable` junto al código, cada uno con su motivo; los Low restantes (zero-checks, shadowing) son decisiones abiertas del kernel, no supresiones.
 
 Invariant handlers con `fail_on_revert = true`: guardan sus propias precondiciones, así que cualquier revert en campaña es hallazgo de kernel. Fork tests sólo con `ARBITRUM_RPC_URL`; `HUMAN_WALLET` agrega el path positivo de Passport.
 
@@ -3164,6 +3166,7 @@ Registro fechado de decisiones cerradas. Una entrada posterior pisa a una anteri
 | 2026-10-27 | Una cuenta nueva puede probar su handle | El mismo hueco que `attest_base`, en `reveal_advanced`: el perfil avanzado que prueba el handle al abrir un deal room (PLATAFORMA ENG-11) exigía `leaf_token == token`, así que una cuenta sin deals no podía probar su handle y su primera negociación nunca llegaba a Agreed. Ahora la misma regla: una hoja sin token prueba su handle para cualquier token sólo si todas sus estadísticas son cero. Off-chain: cambian su VK y su pin, y el proof de fixture |
 | 2026-11-10 | Una attestation está atada al lugar que la lleva | Encontrado al evaluar la plataforma: `attest_base` no tenía un input público que la atara a quien la presenta. Los listados son públicos, así que cualquiera podía copiar la attestation de una cuenta T5 limpia en un listado propio, publicado con una clave de plataforma nueva, que no cuesta nada. El board la verificaba bien, y el lector se enteraba recién en el deal room, con la prueba de handle del 2026-10-02. Llenar el board de listados con reputación ajena no costaba nada. **La regla**: `attest_base` gana el input público `context`. Quien consume lo calcula con lo que lleva la attestation (el listado y la clave que lo publica, o el engagement) y rechaza una attestation hecha para otro contexto o para cualquier lugar (`context = 0`). El circuito no lee `context`: lo ata el binding de los public inputs, el mismo cable que `expiry` y que el `requester` de `reveal_advanced`. Sólo el dueño de `sk_id` puede producir un proof para un contexto nuevo. **Lo que habilita**: un servicio puede contar por `handleCommit` (listados vivos, engagements abiertos), porque una attestation copiada ya no gasta el cupo de otra cuenta. **Lo que no cambia**: la prueba de handle del deal room sigue: el contexto ata a un lugar, no a una conversación. `attest_base` es off-chain: cambian su VK (`test/fixtures/vks/attest_base.json`, pin en `VerifierPins.t.sol`), el proof de fixture, los vectores (`attest.context`) y la lib (`verify.ts`: `opts.context`). Ningún contrato ni otro circuito. Tests: 14 de Noir en el crate, 109 de bun (un contexto ajeno y el contexto cero rompen `bb verify` con el proof real) |
 | 2026-11-15 | **Cierra el pendiente del lugar del mercado (7)** — el mercado no tiene operador | Quedaba abierto quién ocupa el lugar del mercado: Labs con licencia, o un tercero nombrado como puerta. La pregunta del regulador (3.1) busca a quien cobra de cada operación o puede abrir y cerrar la puerta; lo que separa a un host de un operador es la discreción. **La regla**: Labs construye el software y hostea los servicios bajo el MSA. No hace ningún acto del mercado (publicar, elegir contraparte, negociar, fijar precio, firmar, activar, pagar, liberar, congelar, ir a la corte): los hacen los pares. El tablero no retira, no oculta y no cambia un listado aceptado; rechaza al publicar lo que no cumple el formato, y lo único automático es marcar "no vigente" a un listado cuya attestation venció o cuya raíz ya no vale. Los parámetros del mercado (límites, retención, monedas, rails, relojes por defecto, orden de los resultados, gas) los decide la DAO y Labs los aplica; un release no los cambia sin esa decisión. Labs fija sólo los límites técnicos contra el abuso, iguales para todos y sin leer el contenido. Labs vende premium, una suscripción plana que no cambia el orden, la visibilidad, un fee ni una acción del protocolo. **Lo que suma el MSA**: no retirar ni cambiar un listado y no fijar un parámetro del mercado. **Lo que no cambia**: el kernel, los paquetes y la DAO on-chain. **Pendiente**: que el abogado confirme que un host sin discreción no opera un exchange (`PLATAFORMA.md` OD-01, OD-02) |
+| 2026-11-15 | El kernel verifica que `admit` devuelva el sujeto de `identify` | Encontrado al reemplazar Aderyn por Wake en el CI: `Packages.engage` descartaba el sujeto que devuelve `admit`. El módulo de reputación registra cada lado bajo ese sujeto, y el BondVault reserva bajo el del Passport. Hoy coinciden por construcción: los dos leen el mismo `data` del lado y la misma prueba (`wasProven`), y en un pool los dos leen `poolSubjectOf`. Un módulo que no lo respetara separaría la reputación de una cuenta de su bond. **La regla**: `engage` compara los dos sujetos de `admit` con los de `identify` y revierte con `SubjectMismatch` si difieren. No cambia ningún deal válido |
 
 ### R.3 Citas a documentos que ya no existen
 

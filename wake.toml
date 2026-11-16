@@ -1,5 +1,5 @@
-# Wake config (CI job `wake`, gate in .github/wake-gate.py, triage in wake-triage.toml). Detections report on
-# src/ only: mocks/ holds every test double, and the scripts that deploy it refuse to run off a test chain.
+# Wake config (CI job `wake`). Detections report on src/ only: mocks/ holds every test double, and the scripts
+# that deploy it refuse to run off a test chain. Reviewed detections are suppressed in the code, next to each line.
 
 [compiler.solc]
 exclude_paths = ["lib", "script", "test", "mocks", "verifiers", "circuits", "node_modules"]

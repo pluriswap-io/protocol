@@ -251,6 +251,8 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
             assembly ("memory-safe") {
                 tstore(key, 0)
             }
+            // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+            // wake-disable-next-line unchecked-return-value
             notesTree.insert(parked);
         }
         bytes32 poolKey = keccak256(abi.encode(POOL_SIDE, dealId));
@@ -269,6 +271,8 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
             poolSide := tload(poolKey)
         }
         if (poolSide) {
+            // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+            // wake-disable-next-line unchecked-return-value
             notesTree.insert(change);
             return;
         }
@@ -289,6 +293,8 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
         bytes32[] memory notes = new bytes32[](2);
         notes[0] = first;
         notes[1] = change;
+        // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+        // wake-disable-next-line unchecked-return-value
         notesTree.insertMany(notes);
     }
 
@@ -416,6 +422,8 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
         if (amount == 0) revert ZeroAmount();
         if (!depositVerifier.verifyDeposit(token, amount, note, proof)) revert DepositProofFailed();
         Settlement.pullExact(token, msg.sender, amount);
+        // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+        // wake-disable-next-line unchecked-return-value
         notesTree.insert(note);
         emit Deposited(token, msg.sender, amount);
     }
@@ -438,6 +446,8 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
             revert ReabsorbProofFailed();
         }
         notesTree.spend(nullBond);
+        // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+        // wake-disable-next-line unchecked-return-value
         notesTree.insert(newNote);
         delete lockOf[dealId][dealSubject];
         delete cutOf[dealId][dealSubject];
@@ -463,6 +473,8 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
             revert WithdrawProofFailed();
         }
         notesTree.spend(nullBond);
+        // Wake: the tree keeps the root and emits LeafInserted(index, leaf, root).
+        // wake-disable-next-line unchecked-return-value
         if (changeNote != 0) notesTree.insert(changeNote);
         IERC20(token).safeTransfer(dest, amount);
         emit Withdrawn(token, dest, amount, changeNote);
