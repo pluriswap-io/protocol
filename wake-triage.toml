@@ -1,0 +1,77 @@
+# Triaged High detections of Wake (`.github/wake-gate.py`). CI fails on every High detection that is not listed
+# here, and on every entry here that no longer matches a detection. Medium and lower stay visible in the report.
+#
+# An entry matches a detection by detector, file and the function that the message names (the first `...` span).
+# Each entry was reviewed by hand; `why` says why the detection is not exploitable.
+
+# --- Pool: every entrypoint that calls out is nonReentrant (transient guard). The functions without the guard that
+# write state (the setters, approveCourtDigest, startRunoff, windDown) take only a Sponsor, an agent or the
+# Controller of the authorization, so a callee that reenters them must be one, and it could call them directly.
+# `_sync` after the call returns early once `life` left ACTIVE/DEFICIENT.
+
+[[high]]
+detector = "reentrancy"
+path = "src/pools/Pool.sol"
+function = "Pool.fundBond(address,uint256)"
+why = "nonReentrant; the vault is the one the Sponsor named, fixed by the first call"
+
+[[high]]
+detector = "reentrancy"
+path = "src/pools/Pool.sol"
+function = "Pool.withdrawBond(uint256)"
+why = "nonReentrant; books only the balance that arrives (balance before and after)"
+
+[[high]]
+detector = "reentrancy"
+path = "src/pools/Pool.sol"
+function = "Pool.pullEscrowCredit()"
+why = "nonReentrant; the callee is the official escrow of the pool"
+
+[[high]]
+detector = "reentrancy"
+path = "src/pools/Pool.sol"
+function = "Pool.pullCourtCredit(address)"
+why = "nonReentrant and agent-only; books only the balance that arrives (balance before and after)"
+
+# --- PoolFactory
+
+[[high]]
+detector = "reentrancy"
+path = "src/pools/PoolFactory.sol"
+function = "PoolFactory.createPool(address[],address,address[],bool,address[],uint16)"
+why = "the callee is a fresh clone of the official implementation, and Pool.initialize makes no external call"
+
+# --- Escrow and Packages: every kernel entrypoint is nonReentrant (transient guard), the same triage as
+# reentrancy-no-eth in slither.config.json. Packages is a library that runs only inside those entrypoints
+# (activate, release, claim, the timeouts, the mutual exits, verifyProof, readRuling, retryPostTerminal). The only
+# Escrow function without the guard that writes state is cancelNonce, which marks a nonce of its caller.
+
+[[high]]
+detector = "reentrancy"
+path = "src/Escrow.sol"
+function = "Escrow.verifyProof(bytes32,bytes)"
+why = "nonReentrant kernel entrypoint"
+
+[[high]]
+detector = "reentrancy"
+path = "src/Escrow.sol"
+function = "Escrow.openCourt(bytes32)"
+why = "nonReentrant kernel entrypoint; forwards the exact msg.value to the court"
+
+[[high]]
+detector = "reentrancy"
+path = "src/libraries/Packages.sol"
+function = "Packages.engage(struct DealTerms,uint8,bytes32,struct PackageMods,struct PackageData,struct PackagePrices)"
+why = "runs only inside Escrow.activate (nonReentrant); calls only the modules named in the signed terms"
+
+[[high]]
+detector = "reentrancy"
+path = "src/libraries/Packages.sol"
+function = "Packages._engageCourt(struct DealTerms,bytes32,contract ICourt,struct PackageData,uint256)"
+why = "runs only inside Escrow.activate (nonReentrant); the court is the one named in the signed terms"
+
+[[high]]
+detector = "reentrancy"
+path = "src/libraries/Packages.sol"
+function = "Packages.runPostTerminal(struct Deal,bytes32,uint8,uint8,uint8,uint8)"
+why = "runs only inside Escrow._close and retryPostTerminal, reached only from nonReentrant entrypoints"

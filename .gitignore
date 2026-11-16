@@ -14,3 +14,5 @@ deploy.toml
 circuits/target/
 verifiers/out/
 verifiers/cache/
+# Wake build artifacts and detections (`wake detect`, CI job wake).
+.wake/
