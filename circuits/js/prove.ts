@@ -302,16 +302,37 @@ type Vectors = {
   };
 };
 
+/** The arbiter wallet that the `register_humanity_arbiter` fixture names; `test/RegisterRealProof.t.sol` pins it too. */
+const ARBITER_CONTEXT = 0xa4b1n;
+
 const CIRCUIT_LIST: Circuit[] = [
   {
+    // The account registration: `context = 0`, the relayer sends it (2026-11-17).
     name: "register_humanity",
     contract: "RegisterHumanityVerifier",
-    pubs: 3,
+    pubs: 4,
     proverToml: (v) =>
       toml([
         `h_n = ${str(v.registry.sample_hn)}`,
         `root = ${str(v.registry.root)}`,
         `registry_id = ${str(modP(BigInt(v.registry.registry_id)))}`,
+        `context = ${str(0n)}`,
+        `hsk = ${str(modP(BigInt(v.registry.hsk)))}`,
+        `siblings = [${v.registry.siblings.map(str).join(", ")}]`,
+        `indices = [${v.registry.indices.join(", ")}]`,
+      ]),
+  },
+  {
+    // The same human registering as an arbiter (2026-11-17): the proof names the arbiter wallet.
+    name: "register_humanity_arbiter",
+    crate: "register_humanity",
+    pubs: 4,
+    proverToml: (v) =>
+      toml([
+        `h_n = ${str(v.registry.sample_hn)}`,
+        `root = ${str(v.registry.root)}`,
+        `registry_id = ${str(modP(BigInt(v.registry.registry_id)))}`,
+        `context = ${str(ARBITER_CONTEXT)}`,
         `hsk = ${str(modP(BigInt(v.registry.hsk)))}`,
         `siblings = [${v.registry.siblings.map(str).join(", ")}]`,
         `indices = [${v.registry.indices.join(", ")}]`,

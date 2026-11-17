@@ -8,10 +8,16 @@
 // by any decoder observer; hn derives from the secret instead, and one anchor enrolls one
 // hsk (registry-enforced), so one human still burns exactly one hn, forever.
 //
-// Public inputs (signature order, the adapter's amplification checks the last two):
+// Public inputs (signature order; the adapter checks root, registry_id and context):
 //   h_n         the humanity nullifier the passport burns;
 //   root        the registry tree root — the adapter validates it against the ring buffer;
-//   registry_id the registry domain — the adapter pins it to THE served registry instance.
+//   registry_id the registry domain — the adapter pins it to THE served registry instance;
+//   context     who may use the proof (2026-11-17): the arbiter wallet in
+//               `ArbiterRegistry.registerHumanity`, 0 in `PrivatePassport.register` (the relayer
+//               sends it). The circuit does not read it: the public-input binding of the Honk
+//               statement ties it, the same wire as withdraw's `dest` and attest_base's
+//               `context`. Without it, a proof copied from the calldata of an account
+//               registration registered somebody else's `hn` as an arbiter.
 use pluri_commitments::commitments::{hn, identity_commitment};
 use pluri_commitments::merkle::compute_root;
 use pluri_commitments::vectors as v;
@@ -24,6 +30,7 @@ fn main(
     h_n: pub Field,
     root: pub Field,
     registry_id: pub Field,
+    context: pub Field,
     hsk: Field,
     siblings: [Field; DEPTH],
     indices: [u8; DEPTH],

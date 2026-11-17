@@ -10,6 +10,7 @@ import {RegistryHumanityVerifier} from "../src/packages/adapters/RegistryHumanit
 import {RegistryAccountVerifier} from "../src/packages/adapters/RegistryAccountVerifier.sol";
 import {PrivatePassport} from "../src/packages/PrivatePassport.sol";
 import {PrivateReputation} from "../src/packages/PrivateReputation.sol";
+import {ArbiterRegistry} from "../src/packages/ArbiterRegistry.sol";
 import {PoseidonTree, DEFAULT_ROOT_HISTORY, MIN_ROOT_HISTORY, MAX_ROOT_HISTORY} from "../src/packages/PoseidonTree.sol";
 import {PoseidonSingletons} from "./PoseidonSingletons.sol";
 
@@ -28,6 +29,9 @@ contract RegisterRealProofTest is Test {
     string internal proofAccount;
     string internal proofOpen;
     string internal proofUpgrade;
+    /// @dev The same human, proven for the arbiter wallet `ARBITER` (prove.ts `ARBITER_CONTEXT`).
+    string internal proofArbiter;
+    address internal constant ARBITER = address(0xA4B1);
 
     PassportDecoderMock internal decoder;
     HumanityRegistry internal registry;
@@ -58,6 +62,7 @@ contract RegisterRealProofTest is Test {
         proofAccount = vm.readFile("test/fixtures/proofs/register_account.json");
         proofOpen = vm.readFile("test/fixtures/proofs/register_account_open.json");
         proofUpgrade = vm.readFile("test/fixtures/proofs/upgrade_account.json");
+        proofArbiter = vm.readFile("test/fixtures/proofs/register_humanity_arbiter.json");
         openLeaf0 = bytes32(vm.parseJsonUint(vectors, ".open.leaf0"));
         openRoot = bytes32(vm.parseJsonUint(vectors, ".open.root"));
         openNullRep = bytes32(vm.parseJsonUint(vectors, ".open.null_rep"));
@@ -157,7 +162,7 @@ contract RegisterRealProofTest is Test {
         // The adapters see exactly the (hn, leaf0) the circuits proved: the split of the blob
         // matches the arguments the modules pass. A mismatched argument reads as false —
         // the green path of the bundle test is what pins this.
-        assertTrue(humanityVerifier.verifyHumanity(proofHumanityBlob(), hn));
+        assertTrue(humanityVerifier.verifyHumanity(proofHumanityBlob(), hn, address(0)));
         assertTrue(accountVerifier.verifyAccount(proofAccountBlob(), hn, leaf0));
     }
 
@@ -171,7 +176,7 @@ contract RegisterRealProofTest is Test {
         bytes memory accountBlob = proofAccountBlob();
 
         uint256 before = gasleft();
-        humanityVerifier.verifyHumanity(humanityBlob, hn);
+        humanityVerifier.verifyHumanity(humanityBlob, hn, address(0));
         uint256 humanityCost = before - gasleft();
 
         before = gasleft();
@@ -187,7 +192,7 @@ contract RegisterRealProofTest is Test {
     function test_verifyHumanity_rejectsTamperedProof() public {
         bytes memory blob = proofHumanityBlob();
         blob[42] = blob[42] ^ 0xff; // one byte inside the proof body
-        assertFalse(humanityVerifier.verifyHumanity(blob, hn));
+        assertFalse(humanityVerifier.verifyHumanity(blob, hn, address(0)));
         assertFalse(accountVerifier.verifyAccount(blob, hn, leaf0));
 
         vm.expectRevert(PrivatePassport.HumanityNotVerified.selector);
@@ -196,7 +201,7 @@ contract RegisterRealProofTest is Test {
 
     function test_verify_rejectsWrongHn() public {
         bytes32 wrongHn = bytes32(uint256(keccak256("not-the-hn")));
-        assertFalse(humanityVerifier.verifyHumanity(proofHumanityBlob(), wrongHn));
+        assertFalse(humanityVerifier.verifyHumanity(proofHumanityBlob(), wrongHn, address(0)));
         assertFalse(accountVerifier.verifyAccount(proofAccountBlob(), wrongHn, leaf0));
 
         vm.expectRevert(PrivatePassport.HumanityNotVerified.selector);
@@ -216,8 +221,8 @@ contract RegisterRealProofTest is Test {
 
     function test_verify_rejectsMalformedBlob() public {
         // Short blobs and truncated public-input sections read as false, never revert-shaped.
-        assertFalse(humanityVerifier.verifyHumanity(hex"0011", hn));
-        assertFalse(humanityVerifier.verifyHumanity(_truncate(proofHumanityBlob(), 64), hn));
+        assertFalse(humanityVerifier.verifyHumanity(hex"0011", hn, address(0)));
+        assertFalse(humanityVerifier.verifyHumanity(_truncate(proofHumanityBlob(), 64), hn, address(0)));
         assertFalse(accountVerifier.verifyAccount(hex"0011", hn, leaf0));
         assertFalse(accountVerifier.verifyAccount(_truncate(proofAccountBlob(), 64), hn, leaf0));
     }
@@ -231,7 +236,7 @@ contract RegisterRealProofTest is Test {
         RegistryHumanityVerifier foreignVerifier = new RegistryHumanityVerifier(
             foreign, vm.parseJsonBytes(vm.readFile("test/fixtures/verifiers/register_humanity.json"), ".initcode")
         );
-        assertFalse(foreignVerifier.verifyHumanity(proofHumanityBlob(), hn));
+        assertFalse(foreignVerifier.verifyHumanity(proofHumanityBlob(), hn, address(0)));
     }
 
     function test_verify_rejectsForeignRegistryDomain() public {
@@ -241,18 +246,87 @@ contract RegisterRealProofTest is Test {
         RegistryHumanityVerifier otherVerifier = new RegistryHumanityVerifier(
             otherDomain, vm.parseJsonBytes(vm.readFile("test/fixtures/verifiers/register_humanity.json"), ".initcode")
         );
-        assertFalse(otherVerifier.verifyHumanity(proofHumanityBlob(), hn));
+        assertFalse(otherVerifier.verifyHumanity(proofHumanityBlob(), hn, address(0)));
     }
 
     function test_verify_rejectsCrossCircuitProofs() public {
         // The humanity blob splits as (hn, root, domain); the account blob as (hn, leaf0,
         // domain). Swapping them must read as false on both sides: the account blob's
         // "root" is really leaf0, which no registry tree ever knew — and vice versa.
-        assertFalse(humanityVerifier.verifyHumanity(proofAccountBlob(), hn));
+        assertFalse(humanityVerifier.verifyHumanity(proofAccountBlob(), hn, address(0)));
         assertFalse(accountVerifier.verifyAccount(proofHumanityBlob(), hn, leaf0));
     }
 
     /// @dev Solidity cannot slice memory bytes; the truncated-blob tests need copies.
+    // ---------------------------------------------------------------- context (2026-11-17)
+
+    function proofArbiterBlob() internal view returns (bytes memory) {
+        return vm.parseJsonBytes(proofArbiter, ".proof_with_public_inputs");
+    }
+
+    /// @dev The proof names who may use it: the arbiter's proof verifies for that wallet only, and the account
+    ///      registration's (context 0) for no wallet.
+    function test_verifyHumanity_bindsTheContext() public view {
+        assertTrue(humanityVerifier.verifyHumanity(proofArbiterBlob(), hn, ARBITER));
+        assertFalse(humanityVerifier.verifyHumanity(proofArbiterBlob(), hn, address(0)));
+        assertFalse(humanityVerifier.verifyHumanity(proofArbiterBlob(), hn, address(0xBEEF)));
+        assertFalse(humanityVerifier.verifyHumanity(proofHumanityBlob(), hn, ARBITER));
+        // An edited context breaks the Honk statement, not only the adapter's comparison.
+        bytes memory blob = proofArbiterBlob();
+        blob[blob.length - 1] = bytes1(uint8(0xEF));
+        assertFalse(humanityVerifier.verifyHumanity(blob, hn, address(uint160(uint256(bytes32(_last32(blob)))))));
+    }
+
+    function _arbiterRegistry() internal returns (ArbiterRegistry) {
+        return new ArbiterRegistry(
+            address(0xE5C0),
+            address(0x70C3),
+            ArbiterRegistry.Policy(1 days, 1 days, 7 days, 1_000, 5_000, 20, 3_000),
+            address(0),
+            address(0xB0D5),
+            address(humanityVerifier),
+            address(bundle),
+            bytes32(vm.parseJsonUint(vectors, ".registry.registry_id")),
+            address(0)
+        );
+    }
+
+    /// @dev The wallet that the proof names registers its humanity.
+    function test_arbiterRegistry_registersTheWalletTheProofNames() public {
+        ArbiterRegistry panel = _arbiterRegistry();
+        vm.prank(ARBITER);
+        panel.registerHumanity(proofArbiterBlob(), hn);
+        assertEq(panel.hnOf(ARBITER), hn);
+        assertEq(panel.arbiterOfHn(hn), ARBITER);
+    }
+
+    /// @dev The attack the context closes: a proof copied from the calldata of an account registration, or from
+    ///      another arbiter, does not register somebody else's humanity, and leaves the real human free to register.
+    function test_arbiterRegistry_refusesACopiedProof() public {
+        ArbiterRegistry panel = _arbiterRegistry();
+        address thief = makeAddr("thief");
+        vm.startPrank(thief);
+        vm.expectRevert(ArbiterRegistry.ArbiterNotHuman.selector);
+        panel.registerHumanity(proofHumanityBlob(), hn);
+        vm.expectRevert(ArbiterRegistry.ArbiterNotHuman.selector);
+        panel.registerHumanity(proofArbiterBlob(), hn);
+        vm.stopPrank();
+        // The account registration's proof does not register its own human either: it names no wallet.
+        vm.prank(ARBITER);
+        vm.expectRevert(ArbiterRegistry.ArbiterNotHuman.selector);
+        panel.registerHumanity(proofHumanityBlob(), hn);
+        assertEq(panel.arbiterOfHn(hn), address(0));
+        vm.prank(ARBITER);
+        panel.registerHumanity(proofArbiterBlob(), hn);
+        assertEq(panel.arbiterOfHn(hn), ARBITER);
+    }
+
+    function _last32(bytes memory b) internal pure returns (bytes32 x) {
+        assembly {
+            x := mload(add(b, mload(b)))
+        }
+    }
+
     function _truncate(bytes memory b, uint256 n) internal pure returns (bytes memory) {
         bytes memory out = new bytes(n);
         for (uint256 i = 0; i < n; i++) {

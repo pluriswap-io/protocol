@@ -12,11 +12,11 @@ import {HumanityRegistry} from "../HumanityRegistry.sol";
 ///      a failed deploy, or any revert inside the generated verifier reads as `false` —
 ///      never as a revert-shaped pass (the interface pins this).
 ///
-///      The proof blob is `proof || public_inputs` (bb's layout): the trailing 96 bytes are
-///      the three public inputs in circuit order — `hn`, `root`, `registryId`. The adapter
-///      SPLITS the blob and amplifies the check the circuit cannot do on-chain:
-///      the root must be live in the registry's ring buffer, and the domain must be the
-///      served registry's. The Honk verifier itself is deployed from committed initcode
+///      The proof blob is `proof || public_inputs` (bb's layout): the trailing 128 bytes are
+///      the four public inputs in circuit order — `hn`, `root`, `registryId`, `context`. The adapter
+///      SPLITS the blob and amplifies the checks the circuit cannot do on-chain:
+///      the root must be live in the registry's ring buffer, the domain must be the
+///      served registry's, and `context` must be the caller's (2026-11-17). The Honk verifier itself is deployed from committed initcode
 ///      (`test/fixtures/verifiers/`, produced by `bun circuits:prove`) — the main tree cannot
 ///      compile it (via_ir vs the generated dispatchers; see circuits/README.md) — and is
 ///      called by address and selector, never linked.
@@ -27,8 +27,8 @@ contract RegistryHumanityVerifier is IHumanityVerifier {
     /// @dev The BN254 scalar field — the domain of every public input the circuits prove over.
     uint256 internal constant BN254_P = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
-    /// @dev (hn, root, registryId) — must mirror register_humanity's pub signature order.
-    uint256 internal constant PUBLIC_INPUTS = 3;
+    /// @dev (hn, root, registryId, context) — must mirror register_humanity's pub signature order.
+    uint256 internal constant PUBLIC_INPUTS = 4;
 
     HumanityRegistry public immutable registry;
     /// @dev The generated Honk verifier, deployed from initcode in the constructor. Zero
@@ -48,13 +48,15 @@ contract RegistryHumanityVerifier is IHumanityVerifier {
     }
 
     /// @inheritdoc IHumanityVerifier
-    function verifyHumanity(bytes calldata proof, bytes32 hn) external view returns (bool) {
+    function verifyHumanity(bytes calldata proof, bytes32 hn, address context) external view returns (bool) {
         if (honkVerifier == address(0)) return false; // deploy failed — fail closed
         // A blob that cannot even carry the public inputs section is malformed: false, never
         // a panic (the empty-pubs path below would be an out-of-bounds read).
         if (proof.length < PUBLIC_INPUTS * 32) return false;
         (bytes32[] memory pubs, bytes calldata honkProof) = _split(proof);
         if (pubs[0] != hn) return false; // the nullifier the passport is about to burn
+        // Who may use the proof (2026-11-17): an address is a right-aligned field element, never bytes20-left.
+        if (pubs[3] != bytes32(uint256(uint160(context)))) return false;
         if (!registry.isKnownRoot(pubs[1])) return false; // the enrollment root must be live
         // The registry domain is a raw bytes32 tag (keccak-derived, may sit over p); the
         // proof names its canonical field element. The pinned mod-p rule applies here,
