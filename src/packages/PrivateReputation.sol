@@ -6,6 +6,7 @@ import {PackageId} from "../libraries/PackageId.sol";
 import {IPassport} from "./interfaces/IPassport.sol";
 import {IReputation} from "./interfaces/IReputation.sol";
 import {IAccountVerifier} from "./interfaces/IAccountVerifier.sol";
+import {IHumanityVerifier} from "./interfaces/IHumanityVerifier.sol";
 import {IClaimVerifier} from "./interfaces/IClaimVerifier.sol";
 import {IBundleVerifier} from "./interfaces/IBundleVerifier.sol";
 import {IPrivatePassport} from "./interfaces/IPrivatePassport.sol";
@@ -74,6 +75,9 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
     IPassport public immutable passport;
     PoseidonTree public immutable accountTree;
     IAccountVerifier public immutable accountVerifier;
+    /// @dev The humanity gate of a verified account (2026-11-17): `register` and `upgrade` verify the proof of
+    ///      humanity and spend its `hn` in the call that inserts the leaf, so a copied proof cannot be spent alone.
+    IHumanityVerifier public immutable humanityVerifier;
     /// @dev The shared verifier of §E.3.15.4. Immutable, and the module's address is its `packageId`:
     ///      consenting to the package is consenting to this verifier.
     IBundleVerifier public immutable bundleVerifier;
@@ -187,7 +191,7 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
     error BadFee();
     error BadTreeDepth();
     error Unauthorized();
-    error HumanityNotProven();
+    error HumanityNotVerified();
     error AlreadyRegistered();
     error AccountNotVerified();
     error UnknownRoot();
@@ -209,6 +213,7 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
         IPassport passport_,
         PoseidonTree accountTree_,
         IAccountVerifier accountVerifier_,
+        IHumanityVerifier humanityVerifier_,
         IBundleVerifier bundleVerifier_,
         IClaimVerifier claimVerifier_,
         address feeRecipient_,
@@ -223,8 +228,9 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
     ) Governed(governor_) {
         if (
             address(passport_) == address(0) || address(accountTree_) == address(0)
-                || address(accountVerifier_) == address(0) || address(bundleVerifier_) == address(0)
-                || address(claimVerifier_) == address(0) || feeRecipient_ == address(0) || operator_ == address(0)
+                || address(accountVerifier_) == address(0) || address(humanityVerifier_) == address(0)
+                || address(bundleVerifier_) == address(0) || address(claimVerifier_) == address(0)
+                || feeRecipient_ == address(0) || operator_ == address(0)
         ) {
             revert ZeroAddress();
         }
@@ -238,6 +244,7 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
         passport = passport_;
         accountTree = accountTree_;
         accountVerifier = accountVerifier_;
+        humanityVerifier = humanityVerifier_;
         bundleVerifier = bundleVerifier_;
         claimVerifier = claimVerifier_;
         feeRecipient = feeRecipient_;
@@ -249,12 +256,14 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
 
     // ------------------------------------------------------------------ register (F1)
 
-    /// @notice Registers the initial leaf of an account. Must run in the same tx as, and after,
-    ///         `PrivatePassport.register` with the same `hn`: one human, one account.
-    function register(bytes calldata proof, bytes32 hn, bytes32 leaf0) external {
+    /// @notice Registers the initial leaf of a verified account: one human, one account. The proof of humanity and
+    ///         the proof of the account arrive together (2026-11-17). `hn` is spent only with the leaf that its
+    ///         owner proved, so whoever sends a copy of the call registers the owner's own account.
+    /// @dev `context = 0`: the relayer sends the registration, so the proof of humanity names no sender.
+    function register(bytes calldata humanityProof, bytes calldata accountProof, bytes32 hn, bytes32 leaf0) external {
         if (registeredHn[hn]) revert AlreadyRegistered();
-        if (!IPrivatePassport(address(passport)).humanitySpent(hn)) revert HumanityNotProven();
-        if (!accountVerifier.verifyAccount(proof, hn, leaf0)) revert AccountNotVerified();
+        if (!humanityVerifier.verifyHumanity(humanityProof, hn, address(0))) revert HumanityNotVerified();
+        if (!accountVerifier.verifyAccount(accountProof, hn, leaf0)) revert AccountNotVerified();
         registeredHn[hn] = true;
         (uint256 index,) = accountTree.insert(leaf0);
         emit AccountRegistered(hn, leaf0, index);
@@ -270,15 +279,22 @@ contract PrivateReputation is IReputation, IPrivateReputation, Governed {
         emit OpenAccountRegistered(leaf0, index);
     }
 
-    /// @notice Verifies an open account in place (2026-10-01). Runs in the same bundle as, and after,
-    ///         `PrivatePassport.register` with the same `hn` — exactly like `register`, and it spends the same
-    ///         one-per-human slot: a human verifies ONE account, whether at registration or later. The leaf
-    ///         keeps every stat; only its flag changes, so its deals with verified accounts credit from now on.
-    function upgrade(bytes calldata proof, bytes32 hn, bytes32 repRoot, bytes32 nullRep, bytes32 newLeaf) external {
+    /// @notice Verifies an open account in place (2026-10-01). It takes the proof of humanity like `register`, and
+    ///         it spends the same one-per-human slot: a human verifies ONE account, whether at registration or
+    ///         later. The leaf keeps every stat; only its flag changes, so its deals with verified accounts credit
+    ///         from now on.
+    function upgrade(
+        bytes calldata humanityProof,
+        bytes calldata accountProof,
+        bytes32 hn,
+        bytes32 repRoot,
+        bytes32 nullRep,
+        bytes32 newLeaf
+    ) external {
         if (registeredHn[hn]) revert AlreadyRegistered();
-        if (!IPrivatePassport(address(passport)).humanitySpent(hn)) revert HumanityNotProven();
+        if (!humanityVerifier.verifyHumanity(humanityProof, hn, address(0))) revert HumanityNotVerified();
         if (!accountTree.isKnownRoot(repRoot)) revert UnknownRoot();
-        if (!accountVerifier.verifyUpgrade(proof, hn, repRoot, nullRep, newLeaf)) revert AccountNotVerified();
+        if (!accountVerifier.verifyUpgrade(accountProof, hn, repRoot, nullRep, newLeaf)) revert AccountNotVerified();
         registeredHn[hn] = true;
         // The version nullifier: an upgrade is a transition like any other, so it serializes against an
         // activation or a claim of the same version.

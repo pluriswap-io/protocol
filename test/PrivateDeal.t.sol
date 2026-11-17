@@ -176,7 +176,7 @@ contract PrivateDealTest is BaseTest {
         address predictedRep = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 4);
         tree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predictedRep);
         poolFactory = new PoolFactoryStub();
-        passport = new PrivatePassport(tree, humanity, bundle, address(poolFactory));
+        passport = new PrivatePassport(tree, bundle, address(poolFactory));
         vault = new PrivateBondVault(
             passport,
             IPrivateReputation(predictedRep),
@@ -191,6 +191,7 @@ contract PrivateDealTest is BaseTest {
             passport,
             tree,
             account,
+            humanity,
             bundle,
             claimProof,
             FEE_TO,
@@ -206,10 +207,8 @@ contract PrivateDealTest is BaseTest {
         assertEq(address(reputation), predictedRep, "predicted tree owner drifted");
 
         // Two registered humans, two initial leaves.
-        passport.register(ok(true), HN_H);
-        reputation.register(ok(true), HN_H, LEAF0_H);
-        passport.register(ok(true), HN_P);
-        reputation.register(ok(true), HN_P, LEAF0_P);
+        reputation.register(ok(true), ok(true), HN_H, LEAF0_H);
+        reputation.register(ok(true), ok(true), HN_P, LEAF0_P);
 
         ha = _holderAuth(_privateTerms(), 1);
         pa = _providerAuth(_privateTerms(), 1);
@@ -1238,21 +1237,22 @@ contract PrivateDealTest is BaseTest {
     function test_upgrade_verifiesInPlace() public {
         reputation.registerOpen(ok(true), OPEN_LEAF0);
         bytes32 root = tree.root();
-        passport.register(ok(true), HN_LATE);
         uint256 index = tree.nextIndex();
         vm.expectEmit(true, true, true, true, address(reputation));
         emit PrivateReputation.AccountVerified(HN_LATE, UPGRADED_LEAF, index);
-        reputation.upgrade(ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
+        reputation.upgrade(ok(true), ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
         assertTrue(reputation.registeredHn(HN_LATE), "the human's one slot");
         assertTrue(tree.isSpent(NULLREP_OPEN0), "the open version is spent");
         assertEq(tree.nextIndex(), index + 1, "the flagged leaf is in");
     }
 
-    function test_upgrade_needsTheHumanityBurnedFirst() public {
+    function test_upgrade_needsTheProofOfHumanity() public {
         reputation.registerOpen(ok(true), OPEN_LEAF0);
         bytes32 root = tree.root();
-        vm.expectRevert(PrivateReputation.HumanityNotProven.selector);
-        reputation.upgrade(ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
+        vm.expectRevert(PrivateReputation.HumanityNotVerified.selector);
+        reputation.upgrade(ok(false), ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
+        assertFalse(reputation.registeredHn(HN_LATE), "nothing marked");
+        assertFalse(tree.isSpent(NULLREP_OPEN0), "nothing spent");
     }
 
     /// A human who registered verified spent the slot an upgrade needs, and the other way round.
@@ -1260,22 +1260,20 @@ contract PrivateDealTest is BaseTest {
         reputation.registerOpen(ok(true), OPEN_LEAF0);
         bytes32 root = tree.root();
         vm.expectRevert(PrivateReputation.AlreadyRegistered.selector);
-        reputation.upgrade(ok(true), HN_H, root, NULLREP_OPEN0, UPGRADED_LEAF); // HN_H registered in setUp
+        reputation.upgrade(ok(true), ok(true), HN_H, root, NULLREP_OPEN0, UPGRADED_LEAF); // HN_H registered in setUp
 
-        passport.register(ok(true), HN_LATE);
-        reputation.upgrade(ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
+        reputation.upgrade(ok(true), ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
         vm.expectRevert(PrivateReputation.AlreadyRegistered.selector);
-        reputation.register(ok(true), HN_LATE, bytes32(uint256(0x1006)));
+        reputation.register(ok(true), ok(true), HN_LATE, bytes32(uint256(0x1006)));
     }
 
     function test_upgrade_needsALiveRootAndAProof_andIsAtomic() public {
         reputation.registerOpen(ok(true), OPEN_LEAF0);
         bytes32 root = tree.root();
-        passport.register(ok(true), HN_LATE);
         vm.expectRevert(PrivateReputation.UnknownRoot.selector);
-        reputation.upgrade(ok(true), HN_LATE, FAKE_ROOT, NULLREP_OPEN0, UPGRADED_LEAF);
+        reputation.upgrade(ok(true), ok(true), HN_LATE, FAKE_ROOT, NULLREP_OPEN0, UPGRADED_LEAF);
         vm.expectRevert(PrivateReputation.AccountNotVerified.selector);
-        reputation.upgrade(ok(false), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
+        reputation.upgrade(ok(true), ok(false), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
         assertFalse(reputation.registeredHn(HN_LATE), "nothing marked");
         assertFalse(tree.isSpent(NULLREP_OPEN0), "nothing spent");
     }
@@ -1285,12 +1283,11 @@ contract PrivateDealTest is BaseTest {
     function test_upgrade_serializesOnTheVersionNullifier() public {
         reputation.registerOpen(ok(true), OPEN_LEAF0);
         bytes32 root = tree.root();
-        passport.register(ok(true), HN_LATE);
         bytes memory dataH = _data(_in(SUBJECT_H, ADMIT_LEAF_H, NULLREP_OPEN0, root, dealId));
         vm.prank(address(escrow));
         reputation.admit(holder, dealId, address(token), PRINCIPAL, address(0), dataH);
         vm.expectRevert(PoseidonTree.NullifierUsed.selector);
-        reputation.upgrade(ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
+        reputation.upgrade(ok(true), ok(true), HN_LATE, root, NULLREP_OPEN0, UPGRADED_LEAF);
     }
 }
 

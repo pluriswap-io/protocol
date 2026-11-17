@@ -35,9 +35,23 @@ contract MinimumPrincipalTest is Test {
         ClaimVerifierMock claim = new ClaimVerifierMock();
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 2);
         tree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predicted);
-        PrivatePassport passport = new PrivatePassport(tree, humanity, bundle, address(0));
+        PrivatePassport passport = new PrivatePassport(tree, bundle, address(0));
         reputation = new PrivateReputation(
-            passport, tree, account, bundle, claim, address(0xFEE), 0, 0, 0, 0, address(this), address(0), 1, address(0)
+            passport,
+            tree,
+            account,
+            humanity,
+            bundle,
+            claim,
+            address(0xFEE),
+            0,
+            0,
+            0,
+            0,
+            address(this),
+            address(0),
+            1,
+            address(0)
         );
         assertEq(address(reputation), predicted);
     }

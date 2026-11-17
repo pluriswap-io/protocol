@@ -144,11 +144,12 @@ contract PrepareRealProofTest is Test {
 
         address predictedRep = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 2);
         accountTree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predictedRep);
-        passport = new PrivatePassport(accountTree, humanityVerifier, bundle, address(0));
+        passport = new PrivatePassport(accountTree, bundle, address(0));
         reputation = new PrivateReputation(
             passport,
             accountTree,
             accountVerifier,
+            humanityVerifier,
             bundle,
             claimProof,
             FEE_TO,
@@ -165,8 +166,7 @@ contract PrepareRealProofTest is Test {
 
         // Register the sample account with the V1 real-proof bundle: the account tree now
         // holds the genesis leaf0 both prepare proofs witness against.
-        passport.register(proofHumanityBlob(), hn);
-        reputation.register(proofAccountBlob(), hn, leaf0);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, leaf0);
         assertEq(accountTree.nextIndex(), 1, "genesis leaf in");
         assertTrue(accountTree.isKnownRoot(repRoot), "the prepare root is the post-register root");
 

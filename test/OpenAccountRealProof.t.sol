@@ -73,11 +73,12 @@ contract OpenAccountRealProofTest is Test {
 
         address predicted = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 2);
         tree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predicted);
-        passport = new PrivatePassport(tree, humanityVerifier, cbundle, address(0));
+        passport = new PrivatePassport(tree, cbundle, address(0));
         reputation = new PrivateReputation(
             passport,
             tree,
             accountVerifier,
+            humanityVerifier,
             cbundle,
             claimVerifier,
             address(0xFEE),
@@ -250,21 +251,24 @@ contract OpenAccountRealProofTest is Test {
     function test_aStaleVersion_cannotBeUpgraded() public {
         _register();
         _activate();
-        PrivatePassport(address(passport)).register(_proof("register_humanity"), hn);
         bytes32 openRoot = _b(".open.root");
         bytes32 nullRep = _b(".open.null_rep");
         bytes32 newLeaf = _b(".open.upgrade_new_leaf");
         bytes memory proof = _proof("upgrade_account");
         vm.expectRevert(PoseidonTree.NullifierUsed.selector);
-        reputation.upgrade(proof, hn, openRoot, nullRep, newLeaf);
+        reputation.upgrade(_proof("register_humanity"), proof, hn, openRoot, nullRep, newLeaf);
     }
 
     /// The genesis upgrade on real proofs, against the same open tree the side proves under.
     function test_theOpenGenesis_upgradesInPlace() public {
         _register();
-        PrivatePassport(address(passport)).register(_proof("register_humanity"), hn);
         reputation.upgrade(
-            _proof("upgrade_account"), hn, _b(".open.root"), _b(".open.null_rep"), _b(".open.upgrade_new_leaf")
+            _proof("register_humanity"),
+            _proof("upgrade_account"),
+            hn,
+            _b(".open.root"),
+            _b(".open.null_rep"),
+            _b(".open.upgrade_new_leaf")
         );
         assertTrue(reputation.registeredHn(hn));
         // The open activation proof is of the version the upgrade just spent: it cannot activate any more.

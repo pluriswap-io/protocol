@@ -94,7 +94,7 @@ contract DeployPrivateTest is Test {
         DeployPrivate.Stack memory s = _deploy();
         assertEq(address(s.panel.kernel()), ESCROW, "panel kernel");
         assertEq(address(s.panel.token()), TOKEN, "panel bonds in the deal token");
-        assertEq(address(s.panel.humanityVerifier()), address(s.passport.humanityVerifier()), "same humanity");
+        assertEq(address(s.panel.humanityVerifier()), address(s.reputation.humanityVerifier()), "same humanity");
         assertEq(address(s.panel.bundleVerifier()), address(s.passport.bundleVerifier()), "same bundle verifier");
         assertEq(
             s.panel.registryId(), bytes32(vm.readFile("test/fixtures/vectors.json").readUint(".registry.registry_id"))
@@ -134,18 +134,14 @@ contract DeployPrivateTest is Test {
 
         bytes32 hn = bytes32(vectors.readUint(".registry.sample_hn"));
         bytes32 leaf0 = bytes32(vectors.readUint(".registry.sample_leaf0"));
-        s.passport
-            .register(
-                vm.readFile("test/fixtures/proofs/register_humanity.json").readBytes(".proof_with_public_inputs"), hn
-            );
         s.reputation
             .register(
+                vm.readFile("test/fixtures/proofs/register_humanity.json").readBytes(".proof_with_public_inputs"),
                 vm.readFile("test/fixtures/proofs/register_account.json").readBytes(".proof_with_public_inputs"),
                 hn,
                 leaf0
             );
 
-        assertTrue(s.passport.humanitySpent(hn), "humanity not burned");
         assertTrue(s.reputation.registeredHn(hn), "account not registered");
         assertEq(s.accountTree.nextIndex(), 1, "leaf0 not inserted");
         assertTrue(s.accountTree.isKnownRoot(s.accountTree.root()), "root not in the window");

@@ -3,7 +3,6 @@ pragma solidity ^0.8.28;
 
 import {PackageId} from "../libraries/PackageId.sol";
 import {IPassport} from "./interfaces/IPassport.sol";
-import {IHumanityVerifier} from "./interfaces/IHumanityVerifier.sol";
 import {IBundleVerifier} from "./interfaces/IBundleVerifier.sol";
 import {IPrivatePassport} from "./interfaces/IPrivatePassport.sol";
 import {IPoolOperators} from "./interfaces/IPoolOperators.sol";
@@ -11,17 +10,16 @@ import {PoseidonTree} from "./PoseidonTree.sol";
 import {VouchData} from "./libraries/VouchData.sol";
 
 /// @title PrivatePassport
-/// @notice Humanity gate and deal-subject oracle of the private packages (PROTOCOLO.md §E.3.15.3–E.3.15.4).
-/// @dev Two verbs, two proofs, no wallets read:
-///      * `register` burns a humanity nullifier (`hn = Poseidon(anchor, registryId)`): one human
-///        anchor, one account, forever. Two disjoint anchors are two accounts — the same sybil line
-///        as the on-chain Passport adapters.
-///      * `identify` is the kernel's, inside `Escrow.activate`: `data` carries the side's merged
-///        `prepare_side` inputs and proof (Anexo R, 2026-09-29). It checks that the proof names this
-///        deal and a root the tree still accepts, has the shared `BundleVerifier` verify it once —
-///        leaving the transient ticket the reputation and the vault read a moment later — and answers
-///        the `dealSubject` the proof names. There is no buffer and no `prepare`: a proof has nowhere to
-///        execute outside an activation, and nothing of it survives one that fails.
+/// @notice Deal-subject oracle of the private packages (PROTOCOLO.md §E.3.15.3–E.3.15.4).
+/// @dev One verb, no wallets read. The humanity of an account is not here (2026-11-17): `PrivateReputation`
+///      spends the humanity nullifier in the same call that inserts the account, so no proof of humanity can
+///      be spent alone.
+///      `identify` is the kernel's, inside `Escrow.activate`: `data` carries the side's merged
+///      `prepare_side` inputs and proof (Anexo R, 2026-09-29). It checks that the proof names this
+///      deal and a root the tree still accepts, has the shared `BundleVerifier` verify it once —
+///      leaving the transient ticket the reputation and the vault read a moment later — and answers
+///      the `dealSubject` the proof names. There is no buffer and no `prepare`: a proof has nowhere to
+///      execute outside an activation, and nothing of it survives one that fails.
 ///      There is no wallet consent signature either. It existed so a compositor could not hang A's
 ///      subject under B's wallet, but a side's proof is bound to a `dealId` the wallets signed, and only
 ///      the account owner can produce it — whoever hands it over for this deal is the one consenting.
@@ -37,7 +35,6 @@ import {VouchData} from "./libraries/VouchData.sol";
 ///      A mock behind any of the verifier interfaces is not privacy.
 contract PrivatePassport is IPrivatePassport, IPassport {
     PoseidonTree public immutable accountTree;
-    IHumanityVerifier public immutable humanityVerifier;
     /// @dev The shared verifier of §E.3.15.4: one proof per side, read by all three modules. Immutable,
     ///      and the module's address IS its `packageId`, so consenting to the package is consenting to
     ///      this verifier — exactly the relationship the per-module verifier had.
@@ -45,13 +42,7 @@ contract PrivatePassport is IPrivatePassport, IPassport {
     /// @dev The factory whose pools this passport identifies without a proof; zero identifies none.
     address public immutable poolFactory;
 
-    mapping(bytes32 => bool) public spentHumanity;
-
-    event HumanityRegistered(bytes32 indexed hn);
-
     error ZeroAddress();
-    error HumanAlreadySpent();
-    error HumanityNotVerified();
     error UnknownRoot();
     error PassportProofFailed();
     error DealMismatch();
@@ -70,39 +61,11 @@ contract PrivatePassport is IPrivatePassport, IPassport {
 
     uint256 internal constant BN254_P = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
 
-    constructor(
-        PoseidonTree accountTree_,
-        IHumanityVerifier humanityVerifier_,
-        IBundleVerifier bundleVerifier_,
-        address poolFactory_
-    ) {
-        if (
-            address(accountTree_) == address(0) || address(humanityVerifier_) == address(0)
-                || address(bundleVerifier_) == address(0)
-        ) {
-            revert ZeroAddress();
-        }
+    constructor(PoseidonTree accountTree_, IBundleVerifier bundleVerifier_, address poolFactory_) {
+        if (address(accountTree_) == address(0) || address(bundleVerifier_) == address(0)) revert ZeroAddress();
         accountTree = accountTree_;
-        humanityVerifier = humanityVerifier_;
         bundleVerifier = bundleVerifier_;
         poolFactory = poolFactory_;
-    }
-
-    // ------------------------------------------------------------------ register (F1)
-
-    /// @notice Burns a humanity nullifier. Runs in the same bundle tx as
-    ///         `PrivateReputation.register` with the same `hn`.
-    function register(bytes calldata proof, bytes32 hn) external {
-        if (spentHumanity[hn]) revert HumanAlreadySpent();
-        // `context = 0`: the relayer sends the registration, so the proof names no sender (2026-11-17).
-        if (!humanityVerifier.verifyHumanity(proof, hn, address(0))) revert HumanityNotVerified();
-        spentHumanity[hn] = true;
-        emit HumanityRegistered(hn);
-    }
-
-    /// @notice Read side for `PrivateReputation.register`: has this hn been proven before?
-    function humanitySpent(bytes32 hn) external view returns (bool) {
-        return spentHumanity[hn];
     }
 
     // ------------------------------------------------------------------ kernel edge (F2)

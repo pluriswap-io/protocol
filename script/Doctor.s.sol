@@ -273,7 +273,7 @@ contract Doctor is Script {
         address bundle = _addressOf(passport, "bundleVerifier()");
         _ok("reputation shares the passport's bundle verifier", _addressOf(reputation, "bundleVerifier()") == bundle);
         _ok("vault shares the passport's bundle verifier", _addressOf(vault, "bundleVerifier()") == bundle);
-        _runs("passport.humanityVerifier", _addressOf(passport, "humanityVerifier()"), "register_humanity");
+        _runs("reputation.humanityVerifier", _addressOf(reputation, "humanityVerifier()"), "register_humanity");
         _runs("bundleVerifier", bundle, "prepare_side");
         _runsAt("bundleVerifier (vouch)", bundle, "vouchHonkVerifier()", "vouch");
         _runs("reputation.accountVerifier", _addressOf(reputation, "accountVerifier()"), "register_account");
@@ -295,8 +295,8 @@ contract Doctor is Script {
         if (panel != address(0)) {
             _ok("panel.kernel == escrow", _addressOf(panel, "kernel()") == escrow);
             _ok(
-                "panel reads the passport's humanity",
-                _addressOf(panel, "humanityVerifier()") == _addressOf(passport, "humanityVerifier()")
+                "panel reads the reputation's humanity",
+                _addressOf(panel, "humanityVerifier()") == _addressOf(reputation, "humanityVerifier()")
             );
             _ok("panel reads the shared bundle verifier", _addressOf(panel, "bundleVerifier()") == bundle);
             // Across from a pool, the court takes a human's vouch only for the pools the passport knows.
