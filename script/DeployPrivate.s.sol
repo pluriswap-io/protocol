@@ -161,11 +161,12 @@ contract DeployPrivate is PoseidonEnsurer, ChainIds {
         address predictedVault = vm.computeCreateAddress(deployer, n + 3);
 
         s.accountTree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predictedRep);
-        s.passport = new PrivatePassport(s.accountTree, v.humanity, v.bundle, poolFactory);
+        s.passport = new PrivatePassport(s.accountTree, v.bundle, poolFactory);
         s.reputation = new PrivateReputation(
             s.passport,
             s.accountTree,
             v.account,
+            v.humanity,
             v.bundle,
             v.claim,
             TREASURY,

@@ -75,9 +75,7 @@ const ABI = parseAbi([
   "function enroll(bytes32 identityCommitment)",
   "function enrolled(address anchor) view returns (bool)",
   "function identityCommitmentOf(bytes32 hsk) view returns (bytes32)",
-  "function register(bytes proof, bytes32 hn)",
   "function registeredHn(bytes32 hn) view returns (bool)",
-  "function humanitySpent(bytes32 hn) view returns (bool)",
   "function mint(address to, uint256 amount)",
   "function approve(address spender, uint256 amount) returns (bool)",
   "function deposit(address token, uint256 amount, bytes32 note, bytes proof)",
@@ -96,7 +94,7 @@ const ABI = parseAbi([
   "function cutOf(bytes32 dealId, bytes32 subject) view returns (uint256)",
   "function reabsorb(bytes32 dealId, bytes32 dealSubject, bytes32 newNote, bytes32 nullBond, bytes proof)",
 ]);
-const REGISTER_ACCOUNT_ABI = parseAbi(["function register(bytes proof, bytes32 hn, bytes32 leaf0)"]);
+const REGISTER_ACCOUNT_ABI = parseAbi(["function register(bytes humanityProof, bytes accountProof, bytes32 hn, bytes32 leaf0)"]);
 
 const DEAL_TERMS = "(address holder,address controller,address provider,address token,uint256 principal,uint256 fiatDuration,uint256 releaseDuration,uint256 disputeDuration,uint256 arbitrationDuration,bytes32 fiatCommit,bytes32[] packageIds)";
 const ACTIVATE_ABI = parseAbi([
@@ -215,13 +213,10 @@ async function register(name: string, side: Side): Promise<void> {
     const index = tree.state.indexOf(await c.identityCommitment(sk));
     if (index < 0) throw new Error("the identity commitment is not in the enrollment tree");
     const path = tree.state.pathFor(index);
-    if (!(await read<boolean>(layer.privatePassport, "humanitySpent", [b32(hn)]))) {
-      const proof = prove("register_humanity", { h_n: hn, root: path.root, registry_id: REGISTRY_ID, context: 0n, hsk: sk, siblings: path.siblings, indices: path.indices });
-      await send(side.key, layer.privatePassport, "register", [proof, b32(hn)]);
-    }
+    const humanity = prove("register_humanity", { h_n: hn, root: path.root, registry_id: REGISTRY_ID, context: 0n, hsk: sk, siblings: path.siblings, indices: path.indices });
     const leaf0 = await leafAt(sk, await genesisStats(), 0n);
-    const proof = prove("register_account", { h_n: hn, leaf0, registry_id: REGISTRY_ID, verified: 1n, hsk: sk, sk_id: sk });
-    await send(side.key, layer.privateReputation, "register", [proof, b32(hn), b32(leaf0)], REGISTER_ACCOUNT_ABI);
+    const account = prove("register_account", { h_n: hn, leaf0, registry_id: REGISTRY_ID, verified: 1n, hsk: sk, sk_id: sk });
+    await send(side.key, layer.privateReputation, "register", [humanity, account, b32(hn), b32(leaf0)], REGISTER_ACCOUNT_ABI);
   }
   side.steps.register = true;
 }

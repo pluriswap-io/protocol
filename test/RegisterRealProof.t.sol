@@ -100,11 +100,12 @@ contract RegisterRealProofTest is Test {
         // CREATE address pattern of PrivateRegister.t.sol (tree, passport, reputation).
         address predictedRep = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 2);
         accountTree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predictedRep);
-        passport = new PrivatePassport(accountTree, humanityVerifier, bundle, address(0));
+        passport = new PrivatePassport(accountTree, bundle, address(0));
         reputation = new PrivateReputation(
             passport,
             accountTree,
             accountVerifier,
+            humanityVerifier,
             bundle,
             claimProof,
             FEE_TO,
@@ -136,26 +137,18 @@ contract RegisterRealProofTest is Test {
         return vm.parseJsonBytes(proofUpgrade, ".proof_with_public_inputs");
     }
 
-    // ---------------------------------------------------------------- the bundle, green path
+    // ---------------------------------------------------------------- the registration, green path
 
-    function test_register_bundleWithRealProofs() public {
-        vm.expectEmit(true, true, true, true, address(passport));
-        emit PrivatePassport.HumanityRegistered(hn);
-        passport.register(proofHumanityBlob(), hn);
-
+    function test_register_withRealProofs() public {
         vm.expectEmit(true, true, true, true, address(reputation));
         emit PrivateReputation.AccountRegistered(hn, leaf0, 0);
-        reputation.register(proofAccountBlob(), hn, leaf0);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, leaf0);
 
-        assertTrue(passport.humanitySpent(hn));
         assertTrue(reputation.registeredHn(hn));
 
-        // Replay dies on both sides of the bundle, exactly as with the mocks (F1):
-        // one human (one hn) = one account, forever.
-        vm.expectRevert(PrivatePassport.HumanAlreadySpent.selector);
-        passport.register(proofHumanityBlob(), hn);
+        // Replay dies, exactly as with the mocks (F1): one human (one hn) = one account, forever.
         vm.expectRevert(PrivateReputation.AlreadyRegistered.selector);
-        reputation.register(proofAccountBlob(), hn, leaf0);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, leaf0);
     }
 
     function test_register_leaf0_isTheCircuitsLeaf() public view {
@@ -195,8 +188,8 @@ contract RegisterRealProofTest is Test {
         assertFalse(humanityVerifier.verifyHumanity(blob, hn, address(0)));
         assertFalse(accountVerifier.verifyAccount(blob, hn, leaf0));
 
-        vm.expectRevert(PrivatePassport.HumanityNotVerified.selector);
-        passport.register(blob, hn);
+        vm.expectRevert(PrivateReputation.HumanityNotVerified.selector);
+        reputation.register(blob, proofAccountBlob(), hn, leaf0);
     }
 
     function test_verify_rejectsWrongHn() public {
@@ -204,19 +197,23 @@ contract RegisterRealProofTest is Test {
         assertFalse(humanityVerifier.verifyHumanity(proofHumanityBlob(), wrongHn, address(0)));
         assertFalse(accountVerifier.verifyAccount(proofAccountBlob(), wrongHn, leaf0));
 
-        vm.expectRevert(PrivatePassport.HumanityNotVerified.selector);
-        passport.register(proofHumanityBlob(), wrongHn);
+        vm.expectRevert(PrivateReputation.HumanityNotVerified.selector);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), wrongHn, leaf0);
     }
 
     function test_verify_rejectsWrongLeaf0() public {
         bytes32 wrongLeaf = bytes32(uint256(0xBEEF));
         assertFalse(accountVerifier.verifyAccount(proofAccountBlob(), hn, wrongLeaf));
 
-        // Burn the humanity first: the reputation checks humanitySpent BEFORE the account
-        // proof, and the meaningful failure here is the proof's, not the bundle order's.
-        passport.register(proofHumanityBlob(), hn);
+        // The proof of humanity is good and the leaf is not the one its owner proved: nothing is spent
+        // (2026-11-17). A copy of the proof of humanity cannot burn the hn of its owner, who still registers.
         vm.expectRevert(PrivateReputation.AccountNotVerified.selector);
-        reputation.register(proofAccountBlob(), hn, wrongLeaf);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, wrongLeaf);
+        assertFalse(reputation.registeredHn(hn), "the hn is still free");
+        assertEq(accountTree.nextIndex(), 0, "nothing inserted");
+
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, leaf0);
+        assertTrue(reputation.registeredHn(hn), "the owner registers");
     }
 
     function test_verify_rejectsMalformedBlob() public {
@@ -335,11 +332,11 @@ contract RegisterRealProofTest is Test {
         return out;
     }
 
-    function test_register_account_needsHumanityFirst() public {
-        // The bundle order is the security property: the reputation only trusts an hn the
-        // passport has burned against its own membership proof.
-        vm.expectRevert(PrivateReputation.HumanityNotProven.selector);
-        reputation.register(proofAccountBlob(), hn, leaf0);
+    function test_register_refusesTheProofOfAnArbiter() public {
+        // The same human, the same hn, but a proof made for an arbiter wallet (context != 0): it registers no
+        // account. The reputation only trusts an hn that a proof of humanity for an account names.
+        vm.expectRevert(PrivateReputation.HumanityNotVerified.selector);
+        reputation.register(proofArbiterBlob(), proofAccountBlob(), hn, leaf0);
     }
 
     // ---------------------------------------------------------------- open accounts (2026-10-01)
@@ -370,54 +367,49 @@ contract RegisterRealProofTest is Test {
         reputation.registerOpen(proofOpenBlob(), bytes32(uint256(0xBEEF)));
     }
 
-    /// The open account verified in place by the registry sample human, every proof real: the humanity burned
-    /// first, then the upgrade — the version nullifier spent, the flagged leaf inserted, the human's one slot
-    /// taken.
+    /// The open account verified in place by the registry sample human, every proof real, in one call: the version
+    /// nullifier spent, the flagged leaf inserted, the human's one slot taken.
     function test_upgrade_withRealProofs() public {
         reputation.registerOpen(proofOpenBlob(), openLeaf0);
-        passport.register(proofHumanityBlob(), hn);
-
         vm.expectEmit(true, true, true, true, address(reputation));
         emit PrivateReputation.AccountVerified(hn, upgradedLeaf, 1);
-        reputation.upgrade(proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
+        reputation.upgrade(proofHumanityBlob(), proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
 
         assertTrue(reputation.registeredHn(hn), "the human's slot is taken");
         assertTrue(accountTree.isSpent(openNullRep), "the open version is spent");
 
         // One human, one verified account — whichever way it got there.
         vm.expectRevert(PrivateReputation.AlreadyRegistered.selector);
-        reputation.register(proofAccountBlob(), hn, leaf0);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, leaf0);
         vm.expectRevert(PrivateReputation.AlreadyRegistered.selector);
-        reputation.upgrade(proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
+        reputation.upgrade(proofHumanityBlob(), proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
     }
 
     /// And the other order: a human who registered a verified account cannot also verify an open one.
     function test_aRegisteredHuman_cannotAlsoUpgrade() public {
         reputation.registerOpen(proofOpenBlob(), openLeaf0);
-        passport.register(proofHumanityBlob(), hn);
-        reputation.register(proofAccountBlob(), hn, leaf0);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, leaf0);
         vm.expectRevert(PrivateReputation.AlreadyRegistered.selector);
-        reputation.upgrade(proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
+        reputation.upgrade(proofHumanityBlob(), proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
     }
 
-    function test_upgrade_needsHumanityFirst() public {
+    function test_upgrade_needsTheProofOfHumanity() public {
         reputation.registerOpen(proofOpenBlob(), openLeaf0);
-        vm.expectRevert(PrivateReputation.HumanityNotProven.selector);
-        reputation.upgrade(proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
+        vm.expectRevert(PrivateReputation.HumanityNotVerified.selector);
+        reputation.upgrade(proofArbiterBlob(), proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
+        assertFalse(reputation.registeredHn(hn), "the hn is still free");
     }
 
     function test_upgrade_needsALiveRoot() public {
         // Nothing registered: the open sample's root was never this tree's.
-        passport.register(proofHumanityBlob(), hn);
         vm.expectRevert(PrivateReputation.UnknownRoot.selector);
-        reputation.upgrade(proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
+        reputation.upgrade(proofHumanityBlob(), proofUpgradeBlob(), hn, openRoot, openNullRep, upgradedLeaf);
     }
 
     /// Every argument the module passes is one the proof names: another leaf, another nullifier, another human
     /// or another root all read as false, and the module reverts on it.
     function test_upgrade_bindsEveryArgument() public {
         reputation.registerOpen(proofOpenBlob(), openLeaf0);
-        passport.register(proofHumanityBlob(), hn);
         bytes memory blob = proofUpgradeBlob();
         assertTrue(accountVerifier.verifyUpgrade(blob, hn, openRoot, openNullRep, upgradedLeaf));
         assertFalse(accountVerifier.verifyUpgrade(blob, hn, openRoot, openNullRep, bytes32(uint256(1))), "leaf");
@@ -425,7 +417,7 @@ contract RegisterRealProofTest is Test {
         assertFalse(accountVerifier.verifyUpgrade(blob, bytes32(uint256(1)), openRoot, openNullRep, upgradedLeaf), "hn");
         assertFalse(accountVerifier.verifyUpgrade(blob, hn, bytes32(uint256(1)), openNullRep, upgradedLeaf), "root");
         vm.expectRevert(PrivateReputation.AccountNotVerified.selector);
-        reputation.upgrade(blob, hn, openRoot, openNullRep, bytes32(uint256(1)));
+        reputation.upgrade(proofHumanityBlob(), blob, hn, openRoot, openNullRep, bytes32(uint256(1)));
     }
 
     function test_upgrade_rejectsTamperedAndMalformedProofs() public {

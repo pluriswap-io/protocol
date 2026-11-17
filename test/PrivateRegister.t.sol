@@ -49,9 +49,23 @@ contract PrivateRegisterTest is Test {
         // itself consume the next three nonces).
         address predictedRep = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 2);
         tree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predictedRep);
-        passport = new PrivatePassport(tree, humanity, bundle, address(0));
+        passport = new PrivatePassport(tree, bundle, address(0));
         reputation = new PrivateReputation(
-            passport, tree, account, bundle, claimProof, FEE_TO, 0, 0, 0, 0, address(this), address(0), 0, address(0)
+            passport,
+            tree,
+            account,
+            humanity,
+            bundle,
+            claimProof,
+            FEE_TO,
+            0,
+            0,
+            0,
+            0,
+            address(this),
+            address(0),
+            0,
+            address(0)
         );
         assertEq(address(reputation), predictedRep, "predicted tree owner drifted");
     }
@@ -60,84 +74,60 @@ contract PrivateRegisterTest is Test {
         return abi.encode(pass);
     }
 
-    // ---------------------------------------------------------------- PrivatePassport.register
+    // ---------------------------------------------------------------- PrivatePassport
 
-    function test_humanity_burnsHn() public {
-        vm.expectEmit(true, true, true, true, address(passport));
-        emit PrivatePassport.HumanityRegistered(HN_A);
-        passport.register(ok(true), HN_A);
-        assertTrue(passport.humanitySpent(HN_A));
-    }
-
-    function test_humanity_replayReverts() public {
-        passport.register(ok(true), HN_A);
-        vm.expectRevert(PrivatePassport.HumanAlreadySpent.selector);
-        passport.register(ok(true), HN_A);
-        assertTrue(passport.humanitySpent(HN_A));
-    }
-
-    function test_humanity_badProofMarksNothing() public {
-        vm.expectRevert(PrivatePassport.HumanityNotVerified.selector);
-        passport.register(ok(false), HN_A);
-        assertFalse(passport.humanitySpent(HN_A));
-    }
-
-    function test_humanity_zeroConstructorArgs() public {
+    function test_passport_zeroConstructorArgs() public {
         vm.expectRevert(PrivatePassport.ZeroAddress.selector);
-        new PrivatePassport(PoseidonTree(address(0)), humanity, bundle, address(0));
+        new PrivatePassport(PoseidonTree(address(0)), bundle, address(0));
         vm.expectRevert(PrivatePassport.ZeroAddress.selector);
-        new PrivatePassport(tree, IHumanityVerifier(address(0)), bundle, address(0));
-        vm.expectRevert(PrivatePassport.ZeroAddress.selector);
-        new PrivatePassport(tree, humanity, IBundleVerifier(address(0)), address(0));
+        new PrivatePassport(tree, IBundleVerifier(address(0)), address(0));
     }
 
     // ---------------------------------------------------------------- PrivateReputation.register
 
     function test_account_insertsLeaf0() public {
-        passport.register(ok(true), HN_A);
         vm.expectEmit(true, true, true, true, address(reputation));
         emit PrivateReputation.AccountRegistered(HN_A, LEAF_A, 0);
-        reputation.register(ok(true), HN_A, LEAF_A);
+        reputation.register(ok(true), ok(true), HN_A, LEAF_A);
         assertTrue(reputation.registeredHn(HN_A));
         assertEq(reputation.accountTree().nextIndex(), 1);
         assertTrue(reputation.accountTree().isKnownRoot(reputation.accountTree().root()));
     }
 
-    function test_account_requiresHumanityFirst() public {
-        vm.expectRevert(PrivateReputation.HumanityNotProven.selector);
-        reputation.register(ok(true), HN_A, LEAF_A);
+    function test_account_badHumanityMarksNothing() public {
+        vm.expectRevert(PrivateReputation.HumanityNotVerified.selector);
+        reputation.register(ok(false), ok(true), HN_A, LEAF_A);
         assertFalse(reputation.registeredHn(HN_A));
         assertEq(reputation.accountTree().nextIndex(), 0);
     }
 
     function test_account_replayHnReverts() public {
-        passport.register(ok(true), HN_A);
-        reputation.register(ok(true), HN_A, LEAF_A);
+        reputation.register(ok(true), ok(true), HN_A, LEAF_A);
         vm.expectRevert(PrivateReputation.AlreadyRegistered.selector);
-        reputation.register(ok(true), HN_A, LEAF_B);
+        reputation.register(ok(true), ok(true), HN_A, LEAF_B);
         assertEq(reputation.accountTree().nextIndex(), 1);
     }
 
-    function test_account_badProofIsAtomic() public {
-        passport.register(ok(true), HN_A);
+    /// @dev The humanity is spent only with a leaf (2026-11-17): a bad account proof leaves the `hn` free, so a copy
+    ///      of the proof of humanity sent with any other proof spends nothing.
+    function test_account_badAccountProofLeavesHnFree() public {
         vm.expectRevert(PrivateReputation.AccountNotVerified.selector);
-        reputation.register(ok(false), HN_A, LEAF_A);
+        reputation.register(ok(true), ok(false), HN_A, LEAF_A);
         assertFalse(reputation.registeredHn(HN_A));
         assertEq(reputation.accountTree().nextIndex(), 0);
+        reputation.register(ok(true), ok(true), HN_A, LEAF_A);
+        assertTrue(reputation.registeredHn(HN_A));
     }
 
     function test_twoHumansTwoLeaves() public {
-        passport.register(ok(true), HN_A);
-        reputation.register(ok(true), HN_A, LEAF_A);
+        reputation.register(ok(true), ok(true), HN_A, LEAF_A);
         bytes32 root1 = reputation.accountTree().root();
 
-        passport.register(ok(true), HN_B);
-        reputation.register(ok(true), HN_B, LEAF_B);
+        reputation.register(ok(true), ok(true), HN_B, LEAF_B);
         bytes32 root2 = reputation.accountTree().root();
 
         assertTrue(root2 != root1, "root did not move");
         assertEq(reputation.accountTree().nextIndex(), 2);
-        assertTrue(passport.humanitySpent(HN_B));
         assertTrue(reputation.registeredHn(HN_B));
     }
 
@@ -161,6 +151,7 @@ contract PrivateRegisterTest is Test {
             IPassport(address(0)),
             tree,
             account,
+            humanity,
             bundle,
             claimProof,
             FEE_TO,
@@ -178,6 +169,7 @@ contract PrivateRegisterTest is Test {
             passport,
             PoseidonTree(address(0)),
             account,
+            humanity,
             bundle,
             claimProof,
             FEE_TO,
@@ -195,6 +187,7 @@ contract PrivateRegisterTest is Test {
             passport,
             tree,
             IAccountVerifier(address(0)),
+            humanity,
             bundle,
             claimProof,
             FEE_TO,
@@ -212,6 +205,25 @@ contract PrivateRegisterTest is Test {
             passport,
             tree,
             account,
+            IHumanityVerifier(address(0)),
+            bundle,
+            claimProof,
+            FEE_TO,
+            0,
+            0,
+            0,
+            0,
+            address(this),
+            address(this),
+            0,
+            address(0)
+        );
+        vm.expectRevert(PrivateReputation.ZeroAddress.selector);
+        new PrivateReputation(
+            passport,
+            tree,
+            account,
+            humanity,
             IBundleVerifier(address(0)),
             claimProof,
             FEE_TO,
@@ -229,6 +241,7 @@ contract PrivateRegisterTest is Test {
             passport,
             tree,
             account,
+            humanity,
             bundle,
             IClaimVerifier(address(0)),
             FEE_TO,
@@ -246,6 +259,7 @@ contract PrivateRegisterTest is Test {
             passport,
             tree,
             account,
+            humanity,
             bundle,
             claimProof,
             address(0),
@@ -260,13 +274,28 @@ contract PrivateRegisterTest is Test {
         );
         vm.expectRevert(PrivateReputation.ZeroAddress.selector);
         new PrivateReputation(
-            passport, tree, account, bundle, claimProof, FEE_TO, 0, 0, 0, 0, address(0), address(this), 0, address(0)
+            passport,
+            tree,
+            account,
+            humanity,
+            bundle,
+            claimProof,
+            FEE_TO,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            address(this),
+            0,
+            address(0)
         );
         vm.expectRevert(PrivateReputation.BadFee.selector);
         new PrivateReputation(
             passport,
             tree,
             account,
+            humanity,
             bundle,
             claimProof,
             FEE_TO,
@@ -285,7 +314,21 @@ contract PrivateRegisterTest is Test {
     ///      deployment (a BONDS deal then fails closed in `admit`), not a wiring mistake.
     function test_reputation_vaultlessBindingIsLegal() public {
         PrivateReputation vaultless = new PrivateReputation(
-            passport, tree, account, bundle, claimProof, FEE_TO, 0, 0, 0, 0, address(this), address(0), 0, address(0)
+            passport,
+            tree,
+            account,
+            humanity,
+            bundle,
+            claimProof,
+            FEE_TO,
+            0,
+            0,
+            0,
+            0,
+            address(this),
+            address(0),
+            0,
+            address(0)
         );
         assertEq(vaultless.bondsVault(), address(0));
     }
@@ -298,6 +341,7 @@ contract PrivateRegisterTest is Test {
             passport,
             shallow,
             account,
+            humanity,
             bundle,
             claimProof,
             FEE_TO,

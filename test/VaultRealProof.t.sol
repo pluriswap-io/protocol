@@ -266,11 +266,12 @@ contract VaultRealProofTest is Test {
         address predictedRep = vm.computeCreateAddress(address(this), nonce + 2);
         address predictedVault = vm.computeCreateAddress(address(this), nonce + 3);
         accountTree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predictedRep);
-        passport = new PrivatePassport(accountTree, humanityVerifier, cbundle, address(0));
+        passport = new PrivatePassport(accountTree, cbundle, address(0));
         reputation = new PrivateReputation(
             passport,
             accountTree,
             accountVerifier,
+            humanityVerifier,
             cbundle,
             claimVerifier,
             sink, // feeRecipient (the sink doubles as it here: the fee policy is zero anyway)
@@ -291,8 +292,7 @@ contract VaultRealProofTest is Test {
 
         // Register the sample account with the V1 real-proof bundle: the account tree now
         // holds the genesis leaf0 the prepare proofs witness against.
-        passport.register(proofHumanityBlob(), hn);
-        reputation.register(proofAccountBlob(), hn, leaf0);
+        reputation.register(proofHumanityBlob(), proofAccountBlob(), hn, leaf0);
 
         // Fund the depositor: the deposit pulls from the caller, so the caller holds and
         // approves the exact amount.

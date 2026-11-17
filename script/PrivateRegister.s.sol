@@ -4,7 +4,6 @@ pragma solidity ^0.8.28;
 import {Script, console} from "forge-std/Script.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {HumanityRegistry} from "../src/packages/HumanityRegistry.sol";
-import {PrivatePassport} from "../src/packages/PrivatePassport.sol";
 import {PrivateReputation} from "../src/packages/PrivateReputation.sol";
 import {PoseidonTree} from "../src/packages/PoseidonTree.sol";
 import {PassportDecoderMock} from "../mocks/PassportDecoderMock.sol";
@@ -35,7 +34,6 @@ contract PrivateRegister is Script {
         string memory vectors = vm.readFile("test/fixtures/vectors.json");
 
         HumanityRegistry registry = HumanityRegistry(json.readAddress(".humanityRegistry"));
-        PrivatePassport passport = PrivatePassport(json.readAddress(".privatePassport"));
         PrivateReputation rep = PrivateReputation(json.readAddress(".privateReputation"));
         PoseidonTree accountTree = PoseidonTree(json.readAddress(".accountTree"));
         PassportDecoderMock decoder = PassportDecoderMock(json.readAddress(".passportDecoder"));
@@ -62,12 +60,10 @@ contract PrivateRegister is Script {
         if (!registry.enrolled(anchor)) {
             registry.enroll(commitment);
         }
-        // The bundle of §E.3.15.3: humanity first, then the account leaf under the same `hn`.
-        passport.register(_proof("register_humanity"), hn);
-        rep.register(_proof("register_account"), hn, leaf0);
+        // §E.3.15.3: one call takes the humanity and the account leaf under the same `hn`.
+        rep.register(_proof("register_humanity"), _proof("register_account"), hn, leaf0);
         vm.stopBroadcast();
 
-        require(passport.humanitySpent(hn), "humanity not burned");
         require(rep.registeredHn(hn), "account not registered");
         require(accountTree.nextIndex() == 1, "leaf0 not inserted");
         require(accountTree.isKnownRoot(accountTree.root()), "root not live");

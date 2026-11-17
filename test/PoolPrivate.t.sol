@@ -89,11 +89,12 @@ contract PoolPrivateTest is BaseTest {
         address predictedRep = vm.computeCreateAddress(address(this), n + 2);
         address predictedVault = vm.computeCreateAddress(address(this), n + 3);
         tree = new PoseidonTree(32, DEFAULT_ROOT_HISTORY, predictedRep);
-        passport = new PrivatePassport(tree, humanity, bundle, address(factory));
+        passport = new PrivatePassport(tree, bundle, address(factory));
         reputation = new PrivateReputation(
             passport,
             tree,
             account,
+            humanity,
             bundle,
             claim,
             FEE_TO,
