@@ -216,7 +216,7 @@ async function register(name: string, side: Side): Promise<void> {
     if (index < 0) throw new Error("the identity commitment is not in the enrollment tree");
     const path = tree.state.pathFor(index);
     if (!(await read<boolean>(layer.privatePassport, "humanitySpent", [b32(hn)]))) {
-      const proof = prove("register_humanity", { h_n: hn, root: path.root, registry_id: REGISTRY_ID, hsk: sk, siblings: path.siblings, indices: path.indices });
+      const proof = prove("register_humanity", { h_n: hn, root: path.root, registry_id: REGISTRY_ID, context: 0n, hsk: sk, siblings: path.siblings, indices: path.indices });
       await send(side.key, layer.privatePassport, "register", [proof, b32(hn)]);
     }
     const leaf0 = await leafAt(sk, await genesisStats(), 0n);

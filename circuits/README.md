@@ -38,7 +38,8 @@ circuits/
     src/tiers.nr                   # §E.3.14.7 in-circuit: score + cap_raw (T5 sentinel)
     src/constants_p2.nr, constants_p3.nr   # GENERATED — circomlib round constants
     src/vectors.nr                          # GENERATED — the vectors as Noir constants
-  crates/register_humanity/       # V1: hn binding + enrollment membership (3 pubs)
+  crates/register_humanity/       # V1: hn binding + enrollment membership, bound to who uses it (`context`,
+                                  #   2026-11-17: the arbiter wallet, or 0 for the account) (4 pubs)
   crates/register_account/        # V1: leaf0 = leafRep(S=Poseidon(sk_id), genesis), verified (bound to hn) or open
                                   #   (no hn, 2026-10-01) (4 pubs)
   crates/upgrade_account/         # an open account verified in place: the same leaf, flagged (5 pubs, on-chain)

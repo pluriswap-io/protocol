@@ -406,7 +406,9 @@ contract ArbiterRegistry is ICourt, EIP712, Governed {
     function registerHumanity(bytes calldata proof, bytes32 hn) external {
         if (address(humanityVerifier) == address(0)) revert NoHumanityRule();
         if (arbiterOfHn[hn] != address(0) || hnOf[msg.sender] != bytes32(0)) revert HumanTaken();
-        if (!humanityVerifier.verifyHumanity(proof, hn)) revert ArbiterNotHuman();
+        // The proof names this wallet (`context`, 2026-11-17): a proof copied from an account registration, or made
+        // for another wallet, does not register somebody else's humanity here.
+        if (!humanityVerifier.verifyHumanity(proof, hn, msg.sender)) revert ArbiterNotHuman();
         hnOf[msg.sender] = hn;
         arbiterOfHn[hn] = msg.sender;
     }

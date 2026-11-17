@@ -94,7 +94,8 @@ contract PrivatePassport is IPrivatePassport, IPassport {
     ///         `PrivateReputation.register` with the same `hn`.
     function register(bytes calldata proof, bytes32 hn) external {
         if (spentHumanity[hn]) revert HumanAlreadySpent();
-        if (!humanityVerifier.verifyHumanity(proof, hn)) revert HumanityNotVerified();
+        // `context = 0`: the relayer sends the registration, so the proof names no sender (2026-11-17).
+        if (!humanityVerifier.verifyHumanity(proof, hn, address(0))) revert HumanityNotVerified();
         spentHumanity[hn] = true;
         emit HumanityRegistered(hn);
     }
