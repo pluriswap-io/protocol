@@ -14,9 +14,19 @@ import {
 import {Consent} from "../src/libraries/Consent.sol";
 import {ArbiterRegistry} from "../src/packages/ArbiterRegistry.sol";
 import {IBondVault} from "../src/packages/interfaces/IBondVault.sol";
+import {IReputation} from "../src/packages/interfaces/IReputation.sol";
 import {PassportMock} from "../mocks/PassportMock.sol";
 import {Reputation} from "../mocks/Reputation.sol";
 import {BondVault} from "../mocks/BondVault.sol";
+import {GatingMock} from "../mocks/GatingMock.sol";
+import {DepositVerifierMock} from "../mocks/DepositVerifierMock.sol";
+import {BundleVerifierMock} from "../mocks/BundleVerifierMock.sol";
+import {ReabsorbVerifierMock} from "../mocks/ReabsorbVerifierMock.sol";
+import {WithdrawVerifierMock} from "../mocks/WithdrawVerifierMock.sol";
+import {IBundleVerifier} from "../src/packages/interfaces/IBundleVerifier.sol";
+import {PrivateBondVault} from "../src/packages/PrivateBondVault.sol";
+import {PoseidonSingletons} from "./PoseidonSingletons.sol";
+import {BlockingToken} from "./ContestCreditFirst.t.sol";
 import {BaseTest} from "./Base.t.sol";
 
 /// @title The tribunal: one or three arbiters the parties chose while they still cooperated
@@ -234,6 +244,166 @@ contract ArbiterRegistryTest is BaseTest {
         registry.settle(id);
         _assertSolvent();
         assertEq(registry.creditOf(arbs[0]), SHARE / 3 + _avail());
+    }
+
+    /// End-to-end credit-first check: when the winning party's address is blacklisted in the token at ruling time,
+    /// `PrivateBondVault.slash` credits the winner instead of reverting, `postPending` stays clear, and innocent
+    /// arbiters still `settle` and unlock their bonds immediately.
+    function test_settle_succeedsWhenPrivateVaultWinnerBlocksTransfer() public {
+        PoseidonSingletons.install();
+        BlockingToken btok = new BlockingToken();
+        PassportMock ppass = new PassportMock();
+        ppass.setHuman(holder, SUB_H);
+        ppass.setHuman(provider, SUB_P);
+        Reputation prep = new Reputation(ppass, address(0xFEE), 0, 0, 0, 0, address(escrow));
+        vm.mockCall(address(prep), abi.encodeWithSelector(IReputation.admit.selector, holder), abi.encode(SUB_H));
+        vm.mockCall(address(prep), abi.encodeWithSelector(IReputation.admit.selector, provider), abi.encode(SUB_P));
+        vm.mockCall(address(prep), abi.encodeWithSelector(IReputation.notifyTerminal.selector), "");
+        BundleVerifierMock pbundle = new BundleVerifierMock();
+        PrivateBondVault pvault = new PrivateBondVault(
+            ppass,
+            new GatingMock(),
+            address(0xdeaD),
+            address(escrow),
+            new DepositVerifierMock(),
+            pbundle,
+            new ReabsorbVerifierMock(),
+            new WithdrawVerifierMock()
+        );
+        ArbiterRegistry preg = new ArbiterRegistry(
+            address(escrow),
+            address(btok),
+            ArbiterRegistry.Policy(
+                COMMIT, REVEAL, EXIT_DELAY, uint16(LOCK_BPS), uint16(ABSTAIN_BPS), uint16(AVAIL_BPS), uint16(SHARE_BPS)
+            ),
+            _governor(),
+            address(pvault),
+            address(0),
+            address(0),
+            bytes32(0),
+            address(0)
+        );
+        for (uint256 i; i < 3; i++) {
+            btok.mint(arbs[i], BOND);
+            vm.startPrank(arbs[i]);
+            btok.approve(address(preg), type(uint256).max);
+            preg.deposit(BOND);
+            preg.setEncryptionKey(keccak256(abi.encode("x25519", i)));
+            vm.stopPrank();
+        }
+        btok.mint(holder, PRINCIPAL * 5);
+        btok.mint(provider, PRINCIPAL * 5);
+        vm.startPrank(holder);
+        btok.approve(address(escrow), type(uint256).max);
+        btok.approve(address(pvault), type(uint256).max);
+        pvault.deposit(address(btok), PRINCIPAL, bytes32(uint256(0x2001)), abi.encode(true));
+        vm.stopPrank();
+        vm.startPrank(provider);
+        btok.approve(address(pvault), type(uint256).max);
+        pvault.deposit(address(btok), PRINCIPAL, bytes32(uint256(0x2002)), abi.encode(true));
+        vm.stopPrank();
+
+        DealTerms memory t = _p2pTerms();
+        t.token = address(btok);
+        t.arbitrationDuration = COMMIT + REVEAL + 1 hours;
+        t.packageIds = new bytes32[](4);
+        t.packageIds[0] = ppass.packageId();
+        t.packageIds[1] = prep.packageId();
+        t.packageIds[2] = pvault.packageId();
+        t.packageIds[3] = preg.packageId();
+        t.packageIds = _sortIds(t.packageIds);
+
+        bytes32 id = Consent.dealId(escrow.domainSeparator(), t, 77, 77, 0);
+        bytes32 root = pvault.bondRoot();
+        uint256 lock = (PRINCIPAL + 9) / 10;
+        PackageData memory data;
+        data.holder = abi.encode(
+            IBundleVerifier.BundleInputs({
+                dealSubject: SUB_H,
+                dealId: id,
+                token: address(btok),
+                principal: PRINCIPAL,
+                repRoot: bytes32(0),
+                newLeaf: bytes32(0),
+                nullRep: bytes32(0),
+                pairTag: bytes32(0),
+                lockCommit: bytes32(uint256(0x3101)),
+                lockAmount: lock,
+                changeNote: bytes32(uint256(0x2101)),
+                nullBond: keccak256("nb-h"),
+                bondRoot: root,
+                registryId: bytes32(0),
+                hintS: bytes32(0),
+                hintK: bytes32(0),
+                arbiters: [bytes32(0), bytes32(0), bytes32(0)],
+                verified: true
+            }),
+            abi.encode(true)
+        );
+        data.provider = abi.encode(
+            IBundleVerifier.BundleInputs({
+                dealSubject: SUB_P,
+                dealId: id,
+                token: address(btok),
+                principal: PRINCIPAL,
+                repRoot: bytes32(0),
+                newLeaf: bytes32(0),
+                nullRep: bytes32(0),
+                pairTag: bytes32(0),
+                lockCommit: bytes32(uint256(0x3102)),
+                lockAmount: lock,
+                changeNote: bytes32(uint256(0x2102)),
+                nullBond: keccak256("nb-p"),
+                bondRoot: root,
+                registryId: bytes32(0),
+                hintS: bytes32(0),
+                hintK: bytes32(0),
+                arbiters: [bytes32(0), bytes32(0), bytes32(0)],
+                verified: true
+            }),
+            abi.encode(true)
+        );
+        bytes32 appointment = preg.appointmentDigest(id, arbs);
+        bytes[3] memory accepts = [_sign(appointment, pks[0]), _sign(appointment, pks[1]), _sign(appointment, pks[2])];
+        data.court = abi.encode(arbs, _sign(appointment, holderPk), _sign(appointment, providerPk), accepts);
+
+        PackageMods memory mods = PackageMods({
+            passport: address(ppass),
+            reputation: address(prep),
+            bonds: address(pvault),
+            zk: address(0),
+            court: address(preg)
+        });
+        HolderAuthorization memory ha = _holderAuth(t, 77);
+        ProviderAgreement memory pa = _providerAuth(t, 77);
+        ControllerAcceptance memory ca;
+        escrow.activate(ha, _signHolder(ha), pa, _signProvider(pa), ca, "", mods, data);
+        _markFiat(id);
+        vm.prank(holder);
+        escrow.openCourt(id);
+
+        // Provider wins 3-0 while Provider's wallet is blacklisted in the token.
+        btok.block_(provider);
+        for (uint256 i; i < 3; i++) {
+            vm.prank(arbs[i]);
+            preg.commit(id, keccak256(abi.encode(id, arbs[i], uint8(2), bytes32(i))));
+        }
+        vm.warp(block.timestamp + COMMIT);
+        for (uint256 i; i < 3; i++) {
+            vm.prank(arbs[i]);
+            preg.reveal(id, 2, bytes32(i));
+        }
+        escrow.readRuling(id);
+        assertEq(escrow.postPending(id), 0, "no post-terminal bond bit stuck");
+
+        // All three innocent arbiters settle, collect their 30% cut and unlock their bonds immediately.
+        preg.settle(id);
+        for (uint256 i; i < 3; i++) {
+            (, uint256 arbLocked,,) = preg.arbiterOf(arbs[i]);
+            assertEq(arbLocked, 0, "arbiter bond unlocked");
+            assertEq(preg.creditOf(arbs[i]), SHARE / 3 + _avail());
+        }
+        assertEq(pvault.creditOf(address(btok), provider), lock - SHARE);
     }
 
     // --- no dispute ------------------------------------------------------------------------------------
