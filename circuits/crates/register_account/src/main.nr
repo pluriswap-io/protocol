@@ -40,6 +40,9 @@ fn main(
     assert(verified * (hn(hsk, registry_id) - h_n) == 0, "hn mismatch");
     // And none when there is not: an open account names no human, so it cannot spend somebody's.
     assert((1 - verified) * h_n == 0, "an open account names no human");
+    // A verified account shares the secret of its humanity proof (`prepare_side` and `vouch` check the panel
+    // against `hn(sk_id, registry_id)`); an open account has no human (`verified == 0` masks `hsk`).
+    assert(verified * (hsk - sk_id) == 0, "hsk != sk_id");
     // The account: S = Poseidon(sk_id), never on-chain in the clear.
     let s = account_commitment(sk_id);
     // The initial leaf, salted by DERIVATION from the account secret (§E.3.15.3). It used to be
@@ -146,4 +149,18 @@ fn a_verified_registration_needs_its_human() {
 #[test(should_fail_with = "verified is a bit")]
 fn the_flag_is_a_bit() {
     main(0, v::OPEN_LEAF0, v::REGISTRY_ID, 2, 0, v::OPEN_SK_ID);
+}
+
+/// A verified registration cannot separate `hsk` from `sk_id` to bypass the self-arbitration check.
+#[test(should_fail_with = "hsk != sk_id")]
+fn a_verified_registration_binds_hsk_to_sk_id() {
+    let other_hsk = v::REGISTRY_HSK + 1;
+    main(
+        hn(other_hsk, v::REGISTRY_ID),
+        v::REGISTRY_SAMPLE_LEAF0,
+        v::REGISTRY_ID,
+        1,
+        other_hsk,
+        v::REGISTRY_SAMPLE_SK_ID,
+    );
 }

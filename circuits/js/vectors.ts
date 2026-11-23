@@ -47,9 +47,9 @@ const LEAF_EPOCH_CREDITS = 3n;
 const LEAF_REC_COUNT = 5n;
 const LEAF_REC_VOLUME = 900_000_000_000n;
 const LEAF_VERIFIED = 1n;
-// An OPEN account (2026-10-01): registered without a Passport, its own secret. It takes the same deal the
-// prepare sample describes, against the same counterparty, in a tree of its own.
-const OPEN_SK_ID = BigInt(keccak("pluri:open-sk:1")) % P;
+// An OPEN account (2026-10-01): registered without a Passport (`verified = 0`, distinct leaf from `sampleLeaf0`),
+// in a tree of its own, and later upgraded in place by the registry sample human (`upgrade_account` enforces `hsk == sk_id`).
+const OPEN_SK_ID = SK_ID;
 // The counterparty of the pinned deal: a second account, with its own secret. The whole point of the
 // pair construction is that neither side can name it alone.
 const CP_SK_ID = BigInt(keccak("pluri:counterparty-sk:1")) % P;
@@ -83,8 +83,10 @@ const FIAT_SALT = BigInt(keccak("pluri:fiat-salt:1")) % P;
 const TREE_DEPTH = 8;
 
 // The humanity registry of V1: a per-human secret (never enrolled in the clear), the
-// registry domain id, and the depth-20 enrollment tree. Pinned like everything else.
-const REGISTRY_HSK = BigInt(keccak("pluri:registry-hsk:1"));
+// registry domain id, and the depth-20 enrollment tree. `IDENTITY_HSK` pins a raw keccak input (>= p) for
+// the primitive builder row; the registered account sample enforces `hsk == sk_id` (`REGISTRY_HSK = SK_ID`).
+const IDENTITY_HSK = BigInt(keccak("pluri:registry-hsk:1"));
+const REGISTRY_HSK = SK_ID;
 const REGISTRY_DEPTH = 20;
 
 // The prepare flow of V2 (PROTOCOLO.md §E.3.15.4): the account tree is depth 32 (§E.3.15.3),
@@ -187,7 +189,7 @@ async function main() {
   const builders = {
     s: { sk_id: dec(SK_ID), output: dec(s) },
     hn: { anchor: dec(ANCHOR), registry_id: dec(REGISTRY_ID), output: dec(await c.hn(ANCHOR, REGISTRY_ID)) },
-    identity: { hsk: dec(REGISTRY_HSK), output: dec(await c.identityCommitment(REGISTRY_HSK)) },
+    identity: { hsk: dec(IDENTITY_HSK), output: dec(await c.identityCommitment(IDENTITY_HSK)) },
     deal_subject: {
       sk_id: dec(SK_ID),
       deal_id: dec(DEAL_ID),

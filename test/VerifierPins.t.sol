@@ -25,8 +25,8 @@ contract VerifierPinsTest is Test {
 
     function test_onChainVerifiers_arePinned() public view {
         assertEq(_initcodeHash("register_humanity"), 0x54903a7b562f23304a877b1fc99cb97345111c5b3950233902700765380922a4);
-        assertEq(_initcodeHash("register_account"), 0x119de26c645f2afb4ea77b87e1818d3af1fed7b93915ce7222687d838c44bae3);
-        assertEq(_initcodeHash("upgrade_account"), 0xbbc3a65def5523de9100b872b137da11c786b1aa3882e62090695449226e74c0);
+        assertEq(_initcodeHash("register_account"), 0xf3d1b7520417a0fa50a3984d6925e325b27ff2c8e01c42f7967c1592343dcba2);
+        assertEq(_initcodeHash("upgrade_account"), 0x9545746c7e9f5987e08d9fbf4b85599566425bd9448694095636d2b812fe7aaa);
         assertEq(_initcodeHash("prepare_side"), 0x2323df427536bb21384ff0aede8be6a5f55eaaf2587de3ad8c3c4593ffed7801);
         assertEq(_initcodeHash("vouch"), 0x35ecb2b51711cf3e2d04dfb58802d69b62bfeab9665d12db3a9efdd731ddcf2e);
         assertEq(_initcodeHash("deposit"), 0x545ba7d92748433da2abc58495e852519567720593d72ffcab2c5ac87d51b45a);
