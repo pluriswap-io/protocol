@@ -145,6 +145,51 @@ contract PoolHardeningTest is BaseTest, PanelBonds {
         pool.setLimits(1, 1, true);
     }
 
+    function test_limits_enforceMinPrincipal() public {
+        vm.prank(controller);
+        vm.expectRevert(Pool.Unauthorized.selector);
+        pool.setMinPrincipal(PRINCIPAL);
+
+        vm.prank(holder);
+        pool.setMinPrincipal(PRINCIPAL);
+        assertEq(pool.minPrincipal(), PRINCIPAL);
+
+        DealTerms memory small = _terms(pool);
+        small.principal = PRINCIPAL - 1;
+        HolderAuthorization memory haSmall = _holderAuth(small, 1);
+        vm.prank(controller);
+        vm.expectRevert(Pool.OverLimit.selector);
+        pool.authorize(haSmall, _noMods());
+
+        HolderAuthorization memory haExact = _holderAuth(_terms(pool), 2);
+        vm.prank(controller);
+        pool.authorize(haExact, _noMods());
+    }
+
+    function test_limits_capMaxLiveAuths() public {
+        uint256 cap = pool.MAX_LIVE_AUTHS();
+        assertEq(cap, 128);
+        DealTerms memory tiny = _terms(pool);
+        tiny.principal = 1;
+        for (uint256 i = 1; i <= cap; i++) {
+            HolderAuthorization memory ha = _holderAuth(tiny, i);
+            vm.prank(controller);
+            pool.authorize(ha, _noMods());
+        }
+        HolderAuthorization memory over = _holderAuth(tiny, cap + 1);
+        vm.prank(controller);
+        vm.expectRevert(Pool.OverLimit.selector);
+        pool.authorize(over, _noMods());
+
+        // Unlocking one expired auth frees a slot, and deposit/redeem stay healthy at the cap.
+        vm.warp(over.deadline + 1);
+        pool.unlock(1);
+        HolderAuthorization memory next = _holderAuth(tiny, cap + 2);
+        next.deadline = vm.getBlockTimestamp() + 1 days;
+        vm.prank(controller);
+        pool.authorize(next, _noMods());
+    }
+
     // --- credit ---------------------------------------------------------------------------------------
 
     function test_aPayoutTheEscrowCouldNotPush_canBeFetched() public {
