@@ -15,11 +15,11 @@ forge script script/Doctor.s.sol:Doctor --rpc-url $RPC
 
 ## The current testnet records
 
-`sepolia*.json` are the Arbitrum Sepolia deploy of 2026-11-17, from protocol 109e869: the whole stack again, because
-the kernel, the panel, the passport and the reputation changed (#9, #10, #11). `script/e2e.sh` deployed it, and the
-catalog scripts ran with a second key as the Provider (`PROVIDER_PRIVATE_KEY`). The on-chain checks pass, and so
-does the doctor (77 checks, 0 failures). The official escrow is deployed at block 330194221, the private layer at
-330194508.
+`sepolia*.json` are the Arbitrum Sepolia deploy of 2026-11-24, from protocol f820e3c: the whole stack again, because
+the account verifiers (`register_account` and `upgrade_account`), the private bond vault and the pool implementation
+changed (#13). The deploy and catalog scripts ran with a second key as the Provider (`PROVIDER_PRIVATE_KEY`). The
+on-chain checks pass, and so does the doctor (77 checks, 0 failures). The official escrow is deployed at block
+332271671, the private layer at 332272889.
 
 Two records are older:
 
