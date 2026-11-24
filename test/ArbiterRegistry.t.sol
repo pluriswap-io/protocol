@@ -729,6 +729,66 @@ contract ArbiterRegistryTest is BaseTest {
         _expectBindRevert([address(0), address(0), address(0)], ArbiterRegistry.BadPanelSize.selector);
     }
 
+    function test_caseStateOf_tracksFullCaseLifecycle() public {
+        ArbiterRegistry.Case memory empty = registry.caseStateOf(bytes32(uint256(0xDEAD)));
+        assertEq(empty.size, 0);
+        assertEq(empty.principal, 0);
+
+        (bytes32 soloId,) = _activateWith(99, _solo());
+        ArbiterRegistry.Case memory soloCase = registry.caseStateOf(soloId);
+        assertEq(soloCase.size, 1);
+        assertEq(soloCase.arbiters[0], arbs[0]);
+        assertEq(soloCase.arbiters[1], address(0));
+        assertEq(soloCase.availability, _avail());
+        _markFiat(soloId);
+        vm.prank(holder);
+        escrow.release(soloId);
+        registry.settle(soloId);
+
+        (bytes32 id,) = _activate(1);
+        ArbiterRegistry.Case memory c = registry.caseStateOf(id);
+        assertEq(c.size, 3);
+        assertEq(c.arbiters[0], arbs[0]);
+        assertEq(c.arbiters[1], arbs[1]);
+        assertEq(c.arbiters[2], arbs[2]);
+        assertEq(c.holder, holder);
+        assertEq(c.provider, provider);
+        assertEq(c.controller, holder);
+        assertEq(c.principal, PRINCIPAL);
+        assertEq(c.lock, PRINCIPAL * LOCK_BPS / 10_000);
+        assertEq(c.availability, 3 * _avail());
+        assertEq(c.openedAt, 0);
+        assertEq(c.commitWindow, COMMIT);
+        assertEq(c.revealWindow, REVEAL);
+        assertEq(c.abstainSlashBps, ABSTAIN_BPS);
+        assertFalse(c.settled);
+
+        _markFiat(id);
+        uint64 openTs = uint64(block.timestamp);
+        vm.prank(holder);
+        escrow.openCourt(id);
+        c = registry.caseStateOf(id);
+        assertEq(c.openedAt, openTs);
+
+        bytes32 expectedCommit = keccak256(abi.encode(id, arbs[0], uint8(2), bytes32(uint256(0))));
+        _vote(id, 0, 2);
+        c = registry.caseStateOf(id);
+        assertEq(c.commits[0], expectedCommit);
+        assertEq(c.votes[0], 0);
+
+        vm.warp(block.timestamp + COMMIT);
+        _reveal(id, 0, 2);
+        c = registry.caseStateOf(id);
+        assertEq(c.votes[0], 2);
+
+        vm.warp(block.timestamp + REVEAL);
+        escrow.readRuling(id);
+        registry.settle(id);
+        c = registry.caseStateOf(id);
+        assertTrue(c.settled);
+        _assertSolvent();
+    }
+
     /// @dev After every settlement the registry holds exactly the bonds and the credits it owes: no fee is held for
     ///      a settled deal, and no path created or lost value.
     function _assertSolvent() internal view {

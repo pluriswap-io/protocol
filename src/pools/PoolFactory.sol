@@ -35,10 +35,38 @@ contract PoolFactory {
         address[] calldata depositors,
         uint16 controllerFeeBps
     ) external returns (address pool) {
+        Pool.Limits memory limits;
+        pool = _createPool(sponsors, token, controllers, openDeposits, depositors, controllerFeeBps, limits);
+    }
+
+    /// @notice Creates an official pool with Sponsor bounds (`minPrincipal`, `maxPrincipal`, `maxControllerExposure`,
+    ///         `requireCourt`) already active in the creation transaction, closing any multi-block window before
+    ///         `setLimits` / `setMinPrincipal` land.
+    function createPool(
+        address[] calldata sponsors,
+        address token,
+        address[] calldata controllers,
+        bool openDeposits,
+        address[] calldata depositors,
+        uint16 controllerFeeBps,
+        Pool.Limits calldata limits
+    ) external returns (address pool) {
+        pool = _createPool(sponsors, token, controllers, openDeposits, depositors, controllerFeeBps, limits);
+    }
+
+    function _createPool(
+        address[] calldata sponsors,
+        address token,
+        address[] calldata controllers,
+        bool openDeposits,
+        address[] calldata depositors,
+        uint16 controllerFeeBps,
+        Pool.Limits memory limits
+    ) internal returns (address pool) {
         pool = Clones.clone(implementation);
         // Wake: the callee is a fresh clone of the official implementation; initialize makes no external call.
         // wake-disable-next-line reentrancy
-        Pool(pool).initialize(sponsors, token, escrow, controllers, openDeposits, depositors, controllerFeeBps);
+        Pool(pool).initialize(sponsors, token, escrow, controllers, openDeposits, depositors, controllerFeeBps, limits);
         created[pool] = true;
         emit PoolCreated(pool, token, escrow, openDeposits);
     }
