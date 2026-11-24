@@ -15,11 +15,9 @@ forge script script/Doctor.s.sol:Doctor --rpc-url $RPC
 
 ## The current testnet records
 
-`sepolia*.json` are the Arbitrum Sepolia deploy of 2026-11-24, from protocol f820e3c: the whole stack again, because
-the account verifiers (`register_account` and `upgrade_account`), the private bond vault and the pool implementation
-changed (#13). The deploy and catalog scripts ran with a second key as the Provider (`PROVIDER_PRIVATE_KEY`). The
+`sepolia*.json` are the Arbitrum Sepolia deploy of 2026-11-24, from protocol 741f4e3: the v1 contract freeze stack (#15 — `ArbiterRegistry` `HumanityRegistered` + `caseStateOf`, credit-first `Packages.engage` activation fee, and atomic `Pool.Limits` on `PoolFactory.createPool`). The deploy and catalog scripts ran with a second key as the Provider (`PROVIDER_PRIVATE_KEY`). The
 on-chain checks pass, and so does the doctor (77 checks, 0 failures). The official escrow is deployed at block
-332271671, the private layer at 332272889.
+332348804, the private layer at 332349746.
 
 Two records are older:
 
