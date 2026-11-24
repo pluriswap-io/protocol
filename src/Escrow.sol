@@ -277,7 +277,7 @@ contract Escrow is EIP712, ReentrancyGuardTransient, IEscrow {
         id = Consent.dealId(_domainSeparatorV4(), t, ha.nonce, pa.nonce, controllerNonce);
         if (deals[id].status != Status.NONE) revert DealExists();
 
-        (bytes32 subjectH, bytes32 subjectP) = Packages.engage(t, pkgs, id, mods, data, prices);
+        (bytes32 subjectH, bytes32 subjectP) = Packages.engage(t, pkgs, id, mods, data, prices, settlement);
         // The kernel's activation share travels with the principal in one exact pull. It is owed whatever the
         // deal ends in — a cancel included: it is the price of the deal having existed.
         uint256 kernelFee = Packages.share(t.principal, activationBps);

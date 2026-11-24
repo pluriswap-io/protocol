@@ -15,6 +15,7 @@ import {IReputation} from "../src/packages/interfaces/IReputation.sol";
 import {IPassport} from "../src/packages/interfaces/IPassport.sol";
 import {PassportMock} from "../mocks/PassportMock.sol";
 import {Reputation} from "../mocks/Reputation.sol";
+import {BlockingToken} from "./ContestCreditFirst.t.sol";
 import {BaseTest} from "./Base.t.sol";
 
 /// @dev A REPUTATION module that answers `activationFee() == 0` to every read until `admit` runs, and then
@@ -150,6 +151,41 @@ contract EngageActivationFeeTest is BaseTest {
 
         assertEq(uint8(escrow.status(id)), uint8(Status.FUNDED));
         assertEq(IERC20(address(token)).balanceOf(feeRecipient), actFee, "the signed fee was charged");
+    }
+
+    function test_engage_creditsActivationFeeWhenRecipientBlocksTransfer() public {
+        BlockingToken blocking = new BlockingToken();
+        uint256 actBps = 2_500;
+        uint256 actFee = PRINCIPAL * actBps / 10_000;
+        uint256 kernelFee = PRINCIPAL * escrow.activationBps() / 10_000;
+        Reputation honest = new Reputation(passport, feeRecipient, actBps, 0, 0, 0, address(escrow));
+
+        blocking.mint(holder, PRINCIPAL + actFee + kernelFee);
+        vm.prank(holder);
+        blocking.approve(address(escrow), type(uint256).max);
+        blocking.block_(feeRecipient);
+
+        DealTerms memory terms = _p2pTerms();
+        terms.token = address(blocking);
+        terms.packageIds = _sorted2(passport.packageId(), honest.packageId());
+        PackageMods memory mods;
+        mods.passport = address(passport);
+        mods.reputation = address(honest);
+
+        HolderAuthorization memory ha = _holderAuth(terms, 2);
+        ProviderAgreement memory pa = _providerAuth(terms, 2);
+        ControllerAcceptance memory ca;
+        bytes32 id = escrow.activate(ha, _signHolder(ha), pa, _signProvider(pa), ca, "", mods);
+
+        assertEq(uint8(escrow.status(id)), uint8(Status.FUNDED));
+        assertEq(blocking.balanceOf(feeRecipient), 0);
+        assertEq(escrow.creditOf(address(blocking), feeRecipient), actFee, "blocked activation fee sits in credit");
+
+        blocking.unblock(feeRecipient);
+        vm.prank(feeRecipient);
+        escrow.withdraw(address(blocking));
+        assertEq(blocking.balanceOf(feeRecipient), actFee);
+        assertEq(escrow.creditOf(address(blocking), feeRecipient), 0);
     }
 
     function _sorted2(bytes32 a, bytes32 b) internal pure returns (bytes32[] memory ids) {

@@ -137,7 +137,8 @@ library Packages {
     }
 
     /// @dev Identify, admit (cap), pull the activation fee from the Holder, reserve both locks.
-    ///      Runs in the kernel's context: pulls land on the escrow, then move to the fee recipient.
+    ///      Runs in the kernel's context: pulls land on the escrow, then move to the fee recipient via
+    ///      `creditThenTryPush` so a recipient the token refuses never blocks deal activation.
     ///      Each hook about a side receives that side's opaque package data (Anexo R, 2026-09-29).
     ///      Every fee is the copy `resolve` validated, never a re-read: `admit` and `bind` are not `view`, and a module
     ///      that answered one policy while it was checked cannot be paid by another.
@@ -149,7 +150,8 @@ library Packages {
         bytes32 dealId,
         PackageMods memory mods,
         PackageData memory data,
-        PackagePrices memory p
+        PackagePrices memory p,
+        Settlement.Store storage payables
     ) public returns (bytes32 subjectH, bytes32 subjectP) {
         if ((pkgs & PASSPORT) != 0) {
             // Wake: Packages runs only inside nonReentrant kernel entrypoints (Escrow).
@@ -179,7 +181,7 @@ library Packages {
             uint256 fee = share(t.principal, p.repActivationBps);
             if (fee != 0) {
                 Settlement.pullExact(t.token, t.holder, fee);
-                IERC20(t.token).safeTransfer(p.repFeeTo, fee);
+                Settlement.creditThenTryPush(payables, t.token, p.repFeeTo, fee);
                 emit FeeCharged(dealId, FeeKind.Activation, p.repFeeTo, fee);
             }
         }
