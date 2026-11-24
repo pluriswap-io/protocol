@@ -32,6 +32,9 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     bytes4 internal constant MAGIC = 0x1626ba7e;
     uint256 internal constant MIN_FIRST = 1e6;
     uint256 internal constant BPS_DENOM = 10_000;
+    /// @notice Upper bound on concurrent live authorizations (`liveNonces`), keeping O(N) accounting loops well
+    ///         below block gas limits even if a Controller spams small reservations.
+    uint256 public constant MAX_LIVE_AUTHS = 128;
 
     enum Life {
         NONE,
@@ -105,6 +108,7 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     /// @dev The Sponsor's bounds on what the pool's signature can commit (evaluation of 2026-09-28): the largest
     ///      principal of one deal, the most one Controller may have open at once (0 = no bound), and whether every
     ///      deal must carry a tribunal — without one, a fight nobody settles burns the LPs' principal.
+    uint256 public minPrincipal;
     uint256 public maxPrincipal;
     uint256 public maxControllerExposure;
     bool public requireCourt;
@@ -278,11 +282,17 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
         requireCourt = requireCourt_;
     }
 
+    /// @notice Floor on the principal of one authorization (0 = no floor). Future authorizations only.
+    function setMinPrincipal(uint256 minPrincipal_) external {
+        if (!sponsors[msg.sender]) revert Unauthorized();
+        minPrincipal = minPrincipal_;
+    }
+
     function deposit(uint256 amount) external nonReentrant {
-        _recognizeLive();
+        // One pass recognizes newly activated/terminal deals and checks whether any live deal is in a fight.
         // While a deal is in a fight the NAV prices a principal the pool may lose: a newcomer would buy into that
         // loss at full price, and a leaver would hand it to the ones who stay.
-        if (_fightLive()) revert FightInFlight();
+        if (_recognizeAndCheckFight()) revert FightInFlight();
         if (life != Life.ACTIVE && life != Life.DEFICIENT) revert WrongLife();
         if (!openDeposits && !allowedDepositor[msg.sender]) revert Unauthorized();
         if (amount == 0) revert BadTerms();
@@ -298,7 +308,8 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
                 if (invest < MIN_FIRST) revert FirstDepositTooSmall();
                 minted = invest;
             } else {
-                uint256 n = nav();
+                // `_recognizeAndCheckFight` just flushed all live deals into `idle`, `credits` and `locked`.
+                uint256 n = idle + credits + locked + bonded();
                 if (n == 0) revert ZeroNav();
                 minted = invest * totalShares / n;
                 if (minted == 0) revert FirstDepositTooSmall();
@@ -313,11 +324,10 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     }
 
     function redeem(uint256 sharesIn) external nonReentrant {
-        _recognizeLive();
-        if (_fightLive()) revert FightInFlight();
+        if (_recognizeAndCheckFight()) revert FightInFlight();
         if (life != Life.ACTIVE && life != Life.RUNOFF && life != Life.WINDING_DOWN) revert WrongLife();
         if (sharesIn == 0 || sharesIn > sharesOf[msg.sender]) revert InsufficientShares();
-        uint256 n = nav();
+        uint256 n = idle + credits + locked + bonded();
         uint256 assetsOut = sharesIn * n / totalShares;
         if (n == 0) {
             // Books empty: a share is not a claim on idle (there is none). Burn so the vault can
@@ -508,6 +518,8 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
         // Wake: run as a check only.
         // wake-disable-next-line unchecked-return-value
         Packages.resolve(t.packageIds, t.fiatCommit, mods);
+        if (liveNonces.length >= MAX_LIVE_AUTHS) revert OverLimit();
+        if (minPrincipal != 0 && t.principal < minPrincipal) revert OverLimit();
         if (maxPrincipal != 0 && t.principal > maxPrincipal) revert OverLimit();
         if (maxControllerExposure != 0 && controllerOpen[t.controller] + t.principal > maxControllerExposure) {
             revert OverLimit();
@@ -639,9 +651,20 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     }
 
     function _recognizeLive() internal {
+        // Wake: reconciliation and sponsor exits do not gate on active disputes (`checkFight` is false).
+        // wake-disable-next-line unchecked-return-value
+        _recognizeAndScan(false);
+    }
+
+    function _recognizeAndCheckFight() internal returns (bool) {
+        return _recognizeAndScan(true);
+    }
+
+    function _recognizeAndScan(bool checkFight) internal returns (bool) {
         IEscrow kernel = IEscrow(escrow);
         uint256 n = liveNonces.length;
         bool dirty;
+        bool fighting;
         for (uint256 i; i < n; i++) {
             uint256 nonce = liveNonces[i];
             Auth storage a = auths[nonce];
@@ -663,11 +686,15 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
             }
             if (a.recognized) continue;
             (Status st, uint256 returned,) = kernel.settlementOf(id);
-            if (!isTerminal(st)) continue;
-            _applyTerminal(a, returned);
-            dirty = true;
+            if (isTerminal(st)) {
+                _applyTerminal(a, returned);
+                dirty = true;
+            } else if (checkFight && (st == Status.DISPUTED || st == Status.ARBITRATION_ACTIVE)) {
+                fighting = true;
+            }
         }
         if (dirty) _refreshApprove();
+        return fighting;
     }
 
     function _applyTerminal(Auth storage a, uint256 returned) internal {

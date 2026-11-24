@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 import {TestToken} from "../mocks/TestToken.sol";
+import {BlockingToken} from "./ContestCreditFirst.t.sol";
 import {DeadPassportMock} from "../mocks/DeadPassportMock.sol";
 import {GatingMock} from "../mocks/GatingMock.sol";
 import {DepositVerifierMock} from "../mocks/DepositVerifierMock.sol";
@@ -448,6 +449,107 @@ contract PrivateVaultTest is Test {
         vm.prank(address(0xB0B));
         vm.expectRevert(PrivateBondVault.Unauthorized.selector);
         vault.slash(SUBJECT_P, SUBJECT_H, address(token), DEAL_ID, DEST, address(0), 0);
+    }
+
+    /// Credit-first slash: if the winner's signing address blocks transfers (e.g., USDC blacklist), `slash` still
+    /// consumes the loser's lock, releases the winner's own lock, leaves the court's share and parks the payout in
+    /// `creditOf` so `ArbiterRegistry.settle` is never bricked by `POST_BOND_A`.
+    function test_slash_creditsBlockedWinner_andBurnCreditsBlockedSink() public {
+        BlockingToken btok = new BlockingToken();
+        PrivateBondVault bvault = new PrivateBondVault(
+            deadPassport, gating, SINK, address(this), depositProof, bundle, reabsorbProof, withdrawProof
+        );
+        btok.mint(holder, PRINCIPAL * 4);
+        btok.mint(provider, PRINCIPAL * 4);
+        vm.prank(holder);
+        btok.approve(address(bvault), type(uint256).max);
+        vm.prank(provider);
+        btok.approve(address(bvault), type(uint256).max);
+
+        vm.prank(holder);
+        bvault.deposit(address(btok), PRINCIPAL, NOTE_H, ok(true));
+        vm.prank(provider);
+        bvault.deposit(address(btok), PRINCIPAL, NOTE_P, ok(true));
+        bvault.reserve(
+            SUBJECT_H,
+            address(btok),
+            DEAL_ID,
+            PRINCIPAL,
+            abi.encode(
+                _bondIn(
+                    SUBJECT_H, DEAL_ID, address(btok), LOCK, LOCKCOMMIT_H, CHANGE_H, NULLBOND_H1, bvault.bondRoot()
+                ),
+                ok(true)
+            )
+        );
+        bvault.reserve(
+            SUBJECT_P,
+            address(btok),
+            DEAL_ID,
+            PRINCIPAL,
+            abi.encode(
+                _bondIn(
+                    SUBJECT_P, DEAL_ID, address(btok), LOCK, LOCKCOMMIT_P, CHANGE_P, NULLBOND_P1, bvault.bondRoot()
+                ),
+                ok(true)
+            )
+        );
+
+        btok.block_(DEST);
+        uint256 cut = LOCK * 3_000 / 10_000;
+        bvault.slash(SUBJECT_P, SUBJECT_H, address(btok), DEAL_ID, DEST, COURT, 3_000);
+        assertEq(bvault.creditOf(address(btok), DEST), LOCK - cut, "blocked winner credited");
+        (,,, bool winnerReleased) = bvault.lockOf(DEAL_ID, SUBJECT_H);
+        assertTrue(winnerReleased, "winner lock still released");
+        (,, uint256 courtShare) = bvault.shareOf(DEAL_ID);
+        assertEq(courtShare, cut, "court share still left");
+
+        btok.unblock(DEST);
+        vm.prank(DEST);
+        bvault.withdrawCredit(address(btok));
+        assertEq(bvault.creditOf(address(btok), DEST), 0);
+        assertEq(btok.balanceOf(DEST), LOCK - cut);
+
+        // And `burn` falls back to credit when `sink` refuses transfers.
+        bytes32 deal2 = keccak256("deal-blocked-sink");
+        vm.prank(holder);
+        bvault.deposit(address(btok), PRINCIPAL, bytes32(uint256(0x2003)), ok(true));
+        vm.prank(provider);
+        bvault.deposit(address(btok), PRINCIPAL, bytes32(uint256(0x2004)), ok(true));
+        bvault.reserve(
+            SUBJECT_H,
+            address(btok),
+            deal2,
+            PRINCIPAL,
+            abi.encode(
+                _bondIn(
+                    SUBJECT_H, deal2, address(btok), LOCK, LOCKCOMMIT_H2, CHANGE_H2, NULLBOND_H2, bvault.bondRoot()
+                ),
+                ok(true)
+            )
+        );
+        bvault.reserve(
+            SUBJECT_P,
+            address(btok),
+            deal2,
+            PRINCIPAL,
+            abi.encode(
+                _bondIn(
+                    SUBJECT_P,
+                    deal2,
+                    address(btok),
+                    LOCK,
+                    bytes32(uint256(0x3112)),
+                    bytes32(uint256(0x2112)),
+                    keccak256("nullbond-p-2"),
+                    bvault.bondRoot()
+                ),
+                ok(true)
+            )
+        );
+        btok.block_(SINK);
+        bvault.burn(SUBJECT_H, SUBJECT_P, address(btok), deal2);
+        assertEq(bvault.creditOf(address(btok), SINK), LOCK * 2);
     }
 
     // ---------------------------------------------------------------- the court's share (Anexo R, 2026-10-05)

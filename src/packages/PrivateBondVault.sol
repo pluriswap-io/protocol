@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
 import {PackageId} from "../libraries/PackageId.sol";
 import {Settlement} from "../libraries/Settlement.sol";
 import {IPassport} from "./interfaces/IPassport.sol";
@@ -65,7 +66,7 @@ import {PoseidonTree, DEFAULT_ROOT_HISTORY, MIN_ROOT_HISTORY, MAX_ROOT_HISTORY} 
 ///      refuses any other in `admit`, because a counterparty signs a BONDS deal trusting that the
 ///      lock exists — a foreign vault under the same reputation would fake that protection.
 ///      A mock behind any of the verifier interfaces is not privacy.
-contract PrivateBondVault is IBondVault, IPoolBonds {
+contract PrivateBondVault is ReentrancyGuardTransient, IBondVault, IPoolBonds {
     using SafeERC20 for IERC20;
 
     /// @dev Notes tree depth (PROTOCOLO.md §E.3.15.3: 20 is the notes tree, 32 the accounts tree).
@@ -115,6 +116,7 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
     }
 
     mapping(bytes32 dealId => Share) internal _shares;
+    Settlement.Store internal _credits;
 
     /// @dev The public bond accounts of official pools (Anexo R, 2026-10-05): a pool is a peer and carries a bond, but
     ///      a pool is a business with a public record, so its bond is public — no notes, no proofs. Its locks are lock
@@ -338,9 +340,15 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
         if (w.lockCommit == bytes32(0)) _returnPoolLock(winner, dealId, w, w.amount);
         else lockOf[dealId][winner].released = true;
         uint256 cut = _leaveShare(dealId, token, feeTo, loserAmount * feeBps / 10_000);
-        // A pool that wins keeps the payout in its bond, where its NAV reads it; anyone else is paid at `to`.
-        if (isPoolSubject[winner]) _poolFree[winner][token] += loserAmount - cut;
-        else IERC20(token).safeTransfer(to, loserAmount - cut);
+        // A pool that wins keeps the payout in its bond, where its NAV reads it; anyone else is paid credit-first at
+        // `to`, so a blacklisted or reverting winner never leaves `POST_BOND_A` stuck or bricks `ArbiterRegistry.settle`.
+        if (isPoolSubject[winner]) {
+            _poolFree[winner][token] += loserAmount - cut;
+        } else {
+            // Wake: operator-only (the official Escrow inside `nonReentrant` `runPostTerminal`), state updated before push.
+            // wake-disable-next-line reentrancy
+            Settlement.creditThenTryPush(_credits, token, to, loserAmount - cut);
+        }
         emit Unlocked(dealId, winner, token, w.amount);
         emit Slashed(dealId, loser, winner, token, to, loserAmount - cut);
     }
@@ -404,8 +412,20 @@ contract PrivateBondVault is IBondVault, IPoolBonds {
         if (msg.sender != operator) revert Unauthorized();
         uint256 a = _consume(subjectA, dealId);
         uint256 b = _consume(subjectB, dealId);
-        IERC20(token).safeTransfer(sink, a + b);
+        // Wake: operator-only; `_consume` deleted both lock records before pushing to `sink`.
+        // wake-disable-next-line reentrancy
+        Settlement.creditThenTryPush(_credits, token, sink, a + b);
         emit Burned(dealId, subjectA, subjectB, token, a + b);
+    }
+
+    /// @notice Credited payout from `slash` or `burn` that `token` refused to push, waiting for `beneficiary`.
+    function creditOf(address token, address beneficiary) external view returns (uint256) {
+        return Settlement.creditOf(_credits, token, beneficiary);
+    }
+
+    /// @notice Withdraws any credited payout in `token` owed to `msg.sender`.
+    function withdrawCredit(address token) external nonReentrant {
+        Settlement.withdraw(_credits, token, msg.sender);
     }
 
     // ------------------------------------------------------------------ vault edge (the subject's)

@@ -39,8 +39,10 @@ fn main(
     siblings: [Field; 32],
     indices: [u8; 32],
 ) {
-    // The human: the same nullifier the humanity circuit derived.
+    // The human: the same nullifier the humanity circuit derived, and the same secret as the account
+    // (`prepare_side` and `vouch` check the panel against `hn(sk_id, registry_id)`).
     assert(hn(hsk, registry_id) == h_n, "hn mismatch");
+    assert(hsk == sk_id, "hsk != sk_id");
 
     let s = account_commitment(sk_id);
     let leaf = leaf_rep(
@@ -238,5 +240,33 @@ fn a_record_and_a_penalty_ride_through() {
         v::OPEN_PRINCIPAL,
         v::OPEN_ATTEST_SIBLINGS,
         v::OPEN_ATTEST_INDICES,
+    );
+}
+
+/// An upgrade cannot bind a human `hsk` to an open account with a different `sk_id`.
+#[test(should_fail_with = "hsk != sk_id")]
+fn a_human_cannot_upgrade_another_secret() {
+    let other_hsk = v::OPEN_SK_ID + 1;
+    main(
+        hn(other_hsk, v::REGISTRY_ID),
+        v::REGISTRY_ID,
+        v::OPEN_ROOT,
+        v::OPEN_NULL_REP,
+        v::UPGRADE_NEW_LEAF,
+        other_hsk,
+        v::OPEN_SK_ID,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        v::PREPARE_CP_ROOT,
+        0,
+        0,
+        0,
+        0,
+        v::OPEN_SIBLINGS,
+        v::OPEN_INDICES,
     );
 }
