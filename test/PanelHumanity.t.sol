@@ -121,6 +121,17 @@ contract PanelHumanityTest is BaseTest, PanelBonds {
         registry.registerHumanity(abi.encode(true), hns[0]);
     }
 
+    function test_registerHumanity_emitsHumanityRegistered() public {
+        address fourth = vm.addr(0xA4);
+        bytes32 hn4 = keccak256("hn-4");
+        vm.expectEmit(true, true, false, true, address(registry));
+        emit ArbiterRegistry.HumanityRegistered(fourth, hn4);
+        vm.prank(fourth);
+        registry.registerHumanity(abi.encode(true), hn4);
+        assertEq(registry.hnOf(fourth), hn4);
+        assertEq(registry.arbiterOfHn(hn4), fourth);
+    }
+
     /// A panel of one (Anexo R, 2026-09-29): the side proves against the one arbiter and two empty seats — the
     /// zero hn, which no human's nullifier is.
     function test_aPanelOfOne_bindsWhenBothSidesProvedAgainstIt() public {

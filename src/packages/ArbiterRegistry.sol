@@ -187,6 +187,7 @@ contract ArbiterRegistry is ICourt, EIP712, Governed {
     event Slashed(bytes32 indexed dealId, address indexed arbiter, address indexed to, uint256 amount);
     event CreditWithdrawn(address indexed beneficiary, uint256 amount);
     event EncryptionKeySet(address indexed arbiter, bytes32 key);
+    event HumanityRegistered(address indexed arbiter, bytes32 indexed hn);
 
     error ZeroAddress();
     error BadPolicy();
@@ -372,6 +373,10 @@ contract ArbiterRegistry is ICourt, EIP712, Governed {
         return (c.arbiters, c.principal, c.lock, c.openedAt);
     }
 
+    function caseStateOf(bytes32 dealId) external view returns (Case memory) {
+        return _cases[dealId];
+    }
+
     // --- the bond ---------------------------------------------------------------------------------------
 
     function deposit(uint256 amount) external {
@@ -411,6 +416,7 @@ contract ArbiterRegistry is ICourt, EIP712, Governed {
         if (!humanityVerifier.verifyHumanity(proof, hn, msg.sender)) revert ArbiterNotHuman();
         hnOf[msg.sender] = hn;
         arbiterOfHn[hn] = msg.sender;
+        emit HumanityRegistered(msg.sender, hn);
     }
 
     /// @notice Publishes the key the parties seal a case's evidence to. Zero is no key: an arbiter without one
