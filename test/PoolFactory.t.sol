@@ -83,4 +83,39 @@ contract PoolFactoryTest is Test {
         vm.expectRevert(Pool.OpenHasDepositors.selector);
         factory.createPool(sponsors, address(token), none, true, depositors, 0);
     }
+
+    function test_createPool_withLimits_setsBoundsAtomically() public {
+        address[] memory sponsors = new address[](1);
+        sponsors[0] = sponsor;
+        address[] memory controllers = new address[](1);
+        controllers[0] = address(0xC0);
+        address[] memory none = new address[](0);
+        Pool.Limits memory limits =
+            Pool.Limits({minPrincipal: 50e6, maxPrincipal: 500e6, maxControllerExposure: 1_500e6, requireCourt: true});
+
+        address p = factory.createPool(sponsors, address(token), controllers, true, none, 50, limits);
+        assertTrue(factory.isOfficial(p));
+        assertEq(p.codehash, factory.officialCodehash());
+        assertEq(Pool(p).minPrincipal(), 50e6);
+        assertEq(Pool(p).maxPrincipal(), 500e6);
+        assertEq(Pool(p).maxControllerExposure(), 1_500e6);
+        assertTrue(Pool(p).requireCourt());
+        assertEq(Pool(p).controllerFeeBps(), 50);
+
+        vm.expectRevert(Pool.AlreadyInitialized.selector);
+        Pool(p).initialize(sponsors, address(token), address(escrow), controllers, true, none, 50, limits);
+        address impl = factory.implementation();
+        vm.expectRevert(Pool.AlreadyInitialized.selector);
+        Pool(impl).initialize(sponsors, address(token), address(escrow), controllers, true, none, 50, limits);
+    }
+
+    function test_createPool_withLimits_revertsWhenMinExceedsMax() public {
+        address[] memory sponsors = new address[](1);
+        sponsors[0] = sponsor;
+        address[] memory none = new address[](0);
+        Pool.Limits memory bad =
+            Pool.Limits({minPrincipal: 500e6, maxPrincipal: 100e6, maxControllerExposure: 0, requireCourt: false});
+        vm.expectRevert(Pool.BadTerms.selector);
+        factory.createPool(sponsors, address(token), none, true, none, 0, bad);
+    }
 }

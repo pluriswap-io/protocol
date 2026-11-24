@@ -72,6 +72,13 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
     error OperatorUnregistered();
     error WrongVault();
 
+    struct Limits {
+        uint256 minPrincipal;
+        uint256 maxPrincipal;
+        uint256 maxControllerExposure;
+        bool requireCourt;
+    }
+
     struct Auth {
         bytes32 digest;
         DealTerms terms;
@@ -152,8 +159,38 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
         address[] calldata depositors_,
         uint16 controllerFeeBps_
     ) external {
+        Limits memory limits_;
+        _initialize(sponsors_, token_, escrow_, controllers_, openDeposits_, depositors_, controllerFeeBps_, limits_);
+    }
+
+    function initialize(
+        address[] calldata sponsors_,
+        address token_,
+        address escrow_,
+        address[] calldata controllers_,
+        bool openDeposits_,
+        address[] calldata depositors_,
+        uint16 controllerFeeBps_,
+        Limits calldata limits_
+    ) external {
+        _initialize(sponsors_, token_, escrow_, controllers_, openDeposits_, depositors_, controllerFeeBps_, limits_);
+    }
+
+    function _initialize(
+        address[] calldata sponsors_,
+        address token_,
+        address escrow_,
+        address[] calldata controllers_,
+        bool openDeposits_,
+        address[] calldata depositors_,
+        uint16 controllerFeeBps_,
+        Limits memory limits_
+    ) internal {
         if (initialized) revert AlreadyInitialized();
         if (token_ == address(0) || escrow_ == address(0)) revert BadTerms();
+        if (limits_.minPrincipal != 0 && limits_.maxPrincipal != 0 && limits_.minPrincipal > limits_.maxPrincipal) {
+            revert BadTerms();
+        }
         if (sponsors_.length == 0) revert EmptySponsors();
         if (controllerFeeBps_ > BPS_DENOM) revert BadFee();
         if (openDeposits_) {
@@ -169,6 +206,10 @@ contract Pool is ReentrancyGuardTransient, IPoolOperators {
         escrow = escrow_;
         openDeposits = openDeposits_;
         controllerFeeBps = controllerFeeBps_;
+        if (limits_.minPrincipal != 0) minPrincipal = limits_.minPrincipal;
+        if (limits_.maxPrincipal != 0) maxPrincipal = limits_.maxPrincipal;
+        if (limits_.maxControllerExposure != 0) maxControllerExposure = limits_.maxControllerExposure;
+        if (limits_.requireCourt) requireCourt = true;
         life = Life.ACTIVE;
 
         for (uint256 i; i < sponsors_.length; i++) {
