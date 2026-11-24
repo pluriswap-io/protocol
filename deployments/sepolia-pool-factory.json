@@ -1,7 +1,7 @@
 {
   "chainId": 421614,
-  "escrow": "0x94a78E5146617CC571Bd1d45f4C3a0c4Cf619b57",
-  "factory": "0x288007E1feA095ef91E9359F82C1Cc603cD3bbb3",
-  "implementation": "0xBC33E2bDc10535dB9a1B7373261efE4af4f642f9",
-  "officialCodehash": "0xe46b783b318ab7cdeba02d23332baa606f61f8a988325e20a9caa65ac9a1ad14"
+  "escrow": "0xCcC8E1d3D810d96cAae1F94d342C65c9119fCbF1",
+  "factory": "0x889Ad4d98Bd76062BD9bd50E489E91ee6BaD23E0",
+  "implementation": "0x7c2Cc060586aC694879B476FD635884d0A3AD50f",
+  "officialCodehash": "0x2dd70f65a5a50035fb3070b0f80d9aeaf2be43e104020fb6528a51e8caaa4925"
 }
